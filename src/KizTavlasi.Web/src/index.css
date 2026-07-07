@@ -1,0 +1,121 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-night-950: #0e111a;
+  --color-night-900: #141826;
+  --color-night-800: #1c2133;
+  --color-night-700: #272e45;
+  --color-night-600: #343d5b;
+
+  --color-cream-50: #faf6ec;
+  --color-cream-100: #f0e6d2;
+  --color-cream-200: #e2d3b4;
+  --color-cream-300: #cdb88f;
+  --color-cream-400: #b39b6e;
+
+  --color-walnut-900: #2b1d14;
+  --color-walnut-800: #3e2c1e;
+  --color-walnut-700: #533b28;
+  --color-walnut-600: #6b4a32;
+  --color-walnut-500: #83593c;
+
+  --color-bordo-700: #6e2432;
+  --color-bordo-600: #8e2f3c;
+  --color-bordo-500: #a84250;
+  --color-rose-400: #c0687a;
+
+  --color-copper-500: #b87345;
+  --color-copper-400: #cf8f5e;
+
+  --color-gold-500: #d4af37;
+  --color-gold-400: #e3c565;
+
+  --font-display: 'Georgia', 'Times New Roman', serif;
+  --font-body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+html {
+  background-color: var(--color-night-950);
+  color: var(--color-cream-100);
+  font-family: var(--font-body);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-gold-400);
+  outline-offset: 2px;
+}
+
+/* Oyun animasyonları: framer-motion yerine hafif CSS keyframe'leri (performans). */
+@keyframes piece-pop {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes point-flash {
+  0% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-gold {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes turn-dot {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+}
+
+.anim-piece-pop {
+  animation: piece-pop 0.22s ease-out;
+}
+
+.anim-point-flash {
+  animation: point-flash 0.9s ease-out forwards;
+}
+
+.anim-pulse-gold {
+  animation: pulse-gold 1s ease-in-out infinite;
+}
+
+.anim-turn-dot {
+  animation: turn-dot 1.6s ease-in-out infinite;
+}

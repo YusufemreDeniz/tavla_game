@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/KizTavlasi.Api/KizTavlasi.Api.csproj" />
+    <Project Path="src/KizTavlasi.Application/KizTavlasi.Application.csproj" />
+    <Project Path="src/KizTavlasi.Domain/KizTavlasi.Domain.csproj" />
+    <Project Path="src/KizTavlasi.Infrastructure/KizTavlasi.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/KizTavlasi.Application.Tests/KizTavlasi.Application.Tests.csproj" />
+    <Project Path="tests/KizTavlasi.Domain.Tests/KizTavlasi.Domain.Tests.csproj" />
+    <Project Path="tests/KizTavlasi.IntegrationTests/KizTavlasi.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

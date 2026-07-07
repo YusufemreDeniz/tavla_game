@@ -1,0 +1,24 @@
+{
+  "name": "Kız Tavlası Online",
+  "short_name": "Kız Tavlası",
+  "description": "Arkadaşınla linki paylaş, gerçek zamanlı kız tavlası oyna.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0e111a",
+  "theme_color": "#141826",
+  "lang": "tr",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
