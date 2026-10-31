@@ -63,6 +63,36 @@ public sealed class GameEngine
                 TurnWasted: true);
         }
 
+        // Aynı zar atışı içinde son (9.) indirme yapıldığında ikinci zar toplama aşamasında oynanabilir.
+        if (!dice.IsDouble && !board.IsCollecting)
+        {
+            var remainingBringDowns = board.Points.Sum(p => Math.Max(0, p.BackCount - 1));
+            if (remainingBringDowns == 1)
+            {
+                if (board.CanBringDown(dice.Die1))
+                {
+                    var secondPlayable = board.TotalAt(dice.Die2) > 0;
+                    return new RollOutcome(
+                        dice,
+                        secondPlayable ? [dice.Die1, dice.Die2] : [dice.Die1],
+                        secondPlayable ? [] : [WastedStep(board, dice.Die2)],
+                        0,
+                        TurnWasted: false);
+                }
+
+                if (board.CanBringDown(dice.Die2))
+                {
+                    var firstPlayableAfterTransition = board.TotalAt(dice.Die1) > 0;
+                    return new RollOutcome(
+                        dice,
+                        firstPlayableAfterTransition ? [dice.Die2, dice.Die1] : [dice.Die2],
+                        firstPlayableAfterTransition ? [] : [WastedStep(board, dice.Die1)],
+                        0,
+                        TurnWasted: false);
+                }
+            }
+        }
+
         var playable = new List<int>();
         var wasted = new List<DiceStep>();
         foreach (var die in new[] { dice.Die1, dice.Die2 })

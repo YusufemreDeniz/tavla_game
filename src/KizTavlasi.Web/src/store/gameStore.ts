@@ -34,6 +34,8 @@ interface GameStoreState {
   setMyPlayerId: (id: string | null) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   applySnapshot: (snapshot: RoomSnapshotDto) => void;
+  applyAuthoritativeSnapshot: (snapshot: RoomSnapshotDto) => void;
+  setPlayerConnection: (playerId: string, isConnected: boolean, stateVersion?: number) => void;
   setRollingPlayer: (playerId: string | null) => void;
   setPendingRoll: (roll: DiceRollResultDto | null) => void;
   addMovePlayed: (move: MovePlayedDto) => void;
@@ -67,12 +69,36 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   setConnectionStatus: (status) => set({ connectionStatus: status }),
 
   applySnapshot: (snapshot) => {
-    // Eski eventleri reddet: stateVersion geriye gidemez.
+    // Eski veya aynı versiyonlu GameStateUpdated eventlerini reddet: stateVersion geriye gidemez.
     if (snapshot.stateVersion <= get().stateVersion && get().snapshot !== null) {
       return;
     }
     set({ snapshot, stateVersion: snapshot.stateVersion });
   },
+
+  applyAuthoritativeSnapshot: (snapshot) => {
+    // JoinRoom / RejoinRoom yanıtları: daha eski değilse (>=) tam durumu günceller.
+    if (snapshot.stateVersion < get().stateVersion && get().snapshot !== null) {
+      return;
+    }
+    set({ snapshot, stateVersion: snapshot.stateVersion });
+  },
+
+  setPlayerConnection: (playerId, isConnected, eventStateVersion) =>
+    set((state) => {
+      if (!state.snapshot) return state;
+      if (eventStateVersion !== undefined && eventStateVersion < state.stateVersion) {
+        return state;
+      }
+      return {
+        snapshot: {
+          ...state.snapshot,
+          players: state.snapshot.players.map((p) =>
+            p.id === playerId ? { ...p, isConnected } : p,
+          ),
+        },
+      };
+    }),
 
   setRollingPlayer: (playerId) => set({ rollingPlayerId: playerId }),
   setPendingRoll: (roll) => set({ pendingRoll: roll }),

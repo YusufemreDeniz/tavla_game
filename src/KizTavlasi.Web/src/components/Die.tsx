@@ -1,36 +1,37 @@
+import { useId } from 'react';
 import { motion } from 'framer-motion';
 
 const PIP_LAYOUTS: Record<number, [number, number][]> = {
   1: [[50, 50]],
   2: [
-    [30, 30],
-    [70, 70],
+    [29, 29],
+    [71, 71],
   ],
   3: [
-    [28, 28],
+    [27, 27],
     [50, 50],
-    [72, 72],
+    [73, 73],
   ],
   4: [
-    [30, 30],
-    [70, 30],
-    [30, 70],
-    [70, 70],
+    [29, 29],
+    [71, 29],
+    [29, 71],
+    [71, 71],
   ],
   5: [
-    [28, 28],
-    [72, 28],
+    [27, 27],
+    [73, 27],
     [50, 50],
-    [28, 72],
-    [72, 72],
+    [27, 73],
+    [73, 73],
   ],
   6: [
-    [30, 26],
-    [70, 26],
-    [30, 50],
-    [70, 50],
-    [30, 74],
-    [70, 74],
+    [29, 25],
+    [71, 25],
+    [29, 50],
+    [71, 50],
+    [29, 75],
+    [71, 75],
   ],
 };
 
@@ -38,10 +39,15 @@ interface DieProps {
   value: number;
   rolling?: boolean;
   size?: number;
+  highlight?: boolean;
 }
 
-export default function Die({ value, rolling = false, size = 48 }: DieProps) {
+export default function Die({ value, rolling = false, size = 48, highlight = false }: DieProps) {
+  const uid = useId();
+  const bodyGradId = `die-body-${uid}`;
+  const bevelGradId = `die-bevel-${uid}`;
   const pips = PIP_LAYOUTS[value] ?? [];
+  const isOne = value === 1;
 
   return (
     <motion.svg
@@ -52,27 +58,85 @@ export default function Die({ value, rolling = false, size = 48 }: DieProps) {
       aria-label={rolling ? 'Zar atılıyor' : `Zar: ${value}`}
       animate={
         rolling
-          ? { rotate: [0, 90, 180, 270, 360], scale: [1, 0.9, 1.05, 0.95, 1] }
-          : { rotate: 0, scale: 1 }
+          ? {
+              rotate: [0, -18, 95, 200, 360],
+              scale: [1, 0.92, 1.08, 0.95, 1],
+              y: [0, -4, 2, -2, 0],
+            }
+          : { rotate: 0, scale: 1, y: 0 }
       }
-      transition={rolling ? { duration: 0.6, repeat: Infinity, ease: 'linear' } : { duration: 0.25 }}
+      transition={
+        rolling
+          ? { duration: 0.52, repeat: Infinity, ease: 'easeInOut' }
+          : { duration: 0.22, ease: 'easeOut' }
+      }
+      style={{
+        filter: highlight
+          ? 'drop-shadow(0 0 8px rgba(212,175,55,0.65)) drop-shadow(0 3px 5px rgba(0,0,0,0.55))'
+          : 'drop-shadow(0 3px 5px rgba(0,0,0,0.55))',
+      }}
     >
+      <defs>
+        <radialGradient id={bodyGradId} cx="32%" cy="28%" r="75%">
+          <stop offset="0%" stopColor="#fffdf9" />
+          <stop offset="55%" stopColor="#f5ebd6" />
+          <stop offset="100%" stopColor="#dcc79f" />
+        </radialGradient>
+        <linearGradient id={bevelGradId} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.65" />
+          <stop offset="100%" stopColor="#6b4a32" stopOpacity="0.45" />
+        </linearGradient>
+      </defs>
+
+      {/* Dış kemik/fildişi gövde */}
       <rect
         x="4"
         y="4"
         width="92"
         height="92"
-        rx="18"
-        fill="var(--color-cream-50)"
-        stroke="var(--color-walnut-700)"
-        strokeWidth="4"
+        rx="20"
+        fill={`url(#${bodyGradId})`}
+        stroke={highlight ? '#d4af37' : '#533b28'}
+        strokeWidth={highlight ? '4.5' : '3.5'}
       />
+
+      {/* İç pah (bevel) halkası */}
+      <rect
+        x="9"
+        y="9"
+        width="82"
+        height="82"
+        rx="15"
+        fill="none"
+        stroke={`url(#${bevelGradId})`}
+        strokeWidth="2"
+      />
+
       {!rolling &&
         pips.map(([cx, cy], index) => (
-          <circle key={index} cx={cx} cy={cy} r="9" fill="var(--color-night-900)" />
+          <g key={index}>
+            <circle
+              cx={cx}
+              cy={cy + 1.2}
+              r={isOne ? '11.5' : '8.8'}
+              fill="rgba(255,255,255,0.55)"
+            />
+            <circle
+              cx={cx}
+              cy={cy}
+              r={isOne ? '11' : '8.5'}
+              fill={isOne ? '#8e2f3c' : '#1c1510'}
+            />
+            {isOne && <circle cx={cx - 2.5} cy={cy - 2.5} r="2.5" fill="rgba(255,235,230,0.45)" />}
+          </g>
         ))}
+
       {rolling && (
-        <circle cx="50" cy="50" r="10" fill="var(--color-copper-500)" opacity="0.6" />
+        <>
+          <circle cx="34" cy="36" r="7" fill="#6b4a32" opacity="0.45" />
+          <circle cx="50" cy="50" r="8.5" fill="#8e2f3c" opacity="0.6" />
+          <circle cx="66" cy="64" r="7" fill="#6b4a32" opacity="0.45" />
+        </>
       )}
     </motion.svg>
   );

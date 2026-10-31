@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Text.Json;
 using KizTavlasi.Application.Abstractions;
 using KizTavlasi.Application.Dtos;
@@ -13,6 +15,13 @@ namespace KizTavlasi.Application;
 public sealed class RoomService
 {
     private const int MaxCodeGenerationAttempts = 5;
+
+    /// <summary>
+    /// Oyuncu başına aktif SignalR bağlantı kimliklerini takip eder.
+    /// Çoklu sekme veya sayfa yenileme sırasında eski bağlantının kapanışı,
+    /// hâlâ açık başka bir bağlantı varsa oyuncuyu çevrim dışı düşürmez.
+    /// </summary>
+    private static readonly ConcurrentDictionary<Guid, ImmutableHashSet<string>> ActiveConnections = new();
 
     private readonly IGameDbContext _db;
     private readonly IRoomCodeGenerator _codeGenerator;
@@ -111,7 +120,7 @@ public sealed class RoomService
         var normalizedCode = NormalizeCode(roomCode);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
-        return await _db.ExecuteInTransactionAsync(async innerCt =>
+        var txResult = await _db.ExecuteInTransactionAsync(async innerCt =>
         {
             var room = await _db.GameRooms
                 .Include(r => r.Players)
@@ -153,10 +162,16 @@ public sealed class RoomService
             var snapshot = SnapshotMapper.ToSnapshot(room, null, null, now);
             var playerDto = new PlayerDto(playerId, displayName, GameConstants.GuestSeat, false, false);
 
-            await _notifier.PlayerJoinedAsync(room.Code, playerDto, snapshot, innerCt);
-
             return new JoinRoomResult(room.Code, token.Token, playerDto, snapshot);
         }, ct);
+
+        await SafeNotifyAsync(
+            c => _notifier.PlayerJoinedAsync(txResult.RoomCode, txResult.Player, txResult.RoomState, c),
+            txResult.RoomCode,
+            "PlayerJoined",
+            ct);
+
+        return txResult;
     }
 
     /// <summary>Odaya katılmadan önce görülen genel bilgi (auth gerektirmez).</summary>
@@ -188,8 +203,9 @@ public sealed class RoomService
     public async Task LeaveRoomAsync(PlayerSession session, CancellationToken ct = default)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
+        ActiveConnections.TryRemove(session.PlayerId, out _);
 
-        await _db.ExecuteInTransactionAsync<object?>(async innerCt =>
+        var txResult = await _db.ExecuteInTransactionAsync(async innerCt =>
         {
             var (room, match, round) = await LoadRoomGraphAsync(session, tracking: true, innerCt);
             var player = GetValidatedPlayer(room, session);
@@ -197,6 +213,8 @@ public sealed class RoomService
             room.Players.Remove(player);
             _db.Players.Remove(player);
             room.StateVersion++;
+
+            MatchEndedDto? forfeitMatchEnded = null;
 
             if (room.Players.Count == 0)
             {
@@ -209,23 +227,42 @@ public sealed class RoomService
                 var remaining = room.Players[0];
                 if (match is not null)
                 {
+                    if (remaining.Seat == 1 && match.Player1Score < match.RequiredWins)
+                    {
+                        match.Player1Score = match.RequiredWins;
+                    }
+                    else if (remaining.Seat == 2 && match.Player2Score < match.RequiredWins)
+                    {
+                        match.Player2Score = match.RequiredWins;
+                    }
+
                     match.Status = MatchStatus.Completed;
                     match.WinnerPlayerId = remaining.Id;
                     match.CompletedAtUtc = now;
                     match.StateVersion = room.StateVersion;
+                    forfeitMatchEnded = new MatchEndedDto(remaining.Id, match.Player1Score, match.Player2Score, IsMars: false);
                 }
                 if (round is not null && round.Status == RoundStatus.InProgress)
                 {
                     round.Status = RoundStatus.Completed;
                     round.WinnerPlayerId = remaining.Id;
+                    round.CurrentPlayerId = null;
+                    round.PendingDice = string.Empty;
+                    round.PendingBonusPicks = 0;
                     round.CompletedAtUtc = now;
+                    round.StateVersion = room.StateVersion;
                 }
                 room.Status = RoomStatus.Completed;
                 room.CompletedAtUtc = now;
+                if (room.HostPlayerId == player.Id)
+                {
+                    room.HostPlayerId = remaining.Id;
+                }
             }
             else
             {
                 room.Status = RoomStatus.Waiting;
+                room.RematchRequestedByPlayerId = null;
                 if (room.HostPlayerId == player.Id)
                 {
                     room.HostPlayerId = room.Players[0].Id;
@@ -237,19 +274,77 @@ public sealed class RoomService
 
             _logger.LogInformation("Oyuncu odadan ayrıldı. RoomCode: {RoomCode}, PlayerId: {PlayerId}", room.Code, session.PlayerId);
 
+            RoomSnapshotDto? snapshot = null;
             if (room.Players.Count > 0)
             {
-                var snapshot = SnapshotMapper.ToSnapshot(room, match, round, now);
-                await _notifier.PlayerLeftAsync(room.Code, session.PlayerId, snapshot, innerCt);
+                // Ayrılan oyuncunun tahta durumunu referans hatası olmadan map'leyebilmek için
+                // tamamlanan round bilgisini güvenli şekilde snapshot'a dönüştür.
+                snapshot = SnapshotMapper.ToSnapshot(room, match, round, now);
             }
 
-            return null;
+            return (RoomCode: room.Code, Snapshot: snapshot, ForfeitMatchEnded: forfeitMatchEnded);
         }, ct);
+
+        if (txResult.Snapshot is not null)
+        {
+            await SafeNotifyAsync(
+                async c =>
+                {
+                    await _notifier.PlayerLeftAsync(txResult.RoomCode, session.PlayerId, txResult.Snapshot, c);
+                    if (txResult.ForfeitMatchEnded is not null)
+                    {
+                        await _notifier.MatchEndedAsync(txResult.RoomCode, txResult.ForfeitMatchEnded, txResult.Snapshot, c);
+                    }
+                },
+                txResult.RoomCode,
+                "PlayerLeft",
+                ct);
+        }
     }
 
-    /// <summary>SignalR bağlantı/kopma bildirimi.</summary>
-    public async Task SetConnectionStateAsync(PlayerSession session, bool isConnected, CancellationToken ct = default)
+    /// <summary>SignalR bağlantı/kopma bildirimi. Çoklu sekme/bağlantı durumunu güvenli yönetir.</summary>
+    public async Task SetConnectionStateAsync(
+        PlayerSession session,
+        bool isConnected,
+        CancellationToken ct = default,
+        string? connectionId = null)
     {
+        var effectiveConnected = isConnected;
+
+        if (!string.IsNullOrWhiteSpace(connectionId))
+        {
+            if (isConnected)
+            {
+                ActiveConnections.AddOrUpdate(
+                    session.PlayerId,
+                    _ => [connectionId],
+                    (_, existing) => existing.Add(connectionId));
+                effectiveConnected = true;
+            }
+            else
+            {
+                if (ActiveConnections.TryGetValue(session.PlayerId, out var existing))
+                {
+                    var updated = existing.Remove(connectionId);
+                    if (updated.IsEmpty)
+                    {
+                        ActiveConnections.TryRemove(session.PlayerId, out _);
+                        effectiveConnected = false;
+                    }
+                    else
+                    {
+                        ActiveConnections[session.PlayerId] = updated;
+                        // Oyuncunun başka bir sekmesi/bağlantısı hâlâ açık; çevrim dışı yapma.
+                        return;
+                    }
+                }
+            }
+        }
+        else if (!isConnected)
+        {
+            ActiveConnections.TryRemove(session.PlayerId, out _);
+        }
+
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         var player = await _db.Players
@@ -261,14 +356,19 @@ public sealed class RoomService
             return;
         }
 
-        player.IsConnected = isConnected;
+        player.IsConnected = effectiveConnected;
         player.LastSeenAtUtc = now;
-        player.DisconnectedAtUtc = isConnected ? null : now;
+        player.DisconnectedAtUtc = effectiveConnected ? null : now;
         await _db.SaveChangesAsync(ct);
 
         var (room, match, round) = await LoadRoomGraphAsync(session, tracking: false, ct);
         var snapshot = SnapshotMapper.ToSnapshot(room, match, round, now);
-        await _notifier.PlayerConnectionChangedAsync(session.RoomCode, session.PlayerId, isConnected, snapshot, ct);
+
+        await SafeNotifyAsync(
+            c => _notifier.PlayerConnectionChangedAsync(session.RoomCode, session.PlayerId, effectiveConnected, snapshot, c),
+            session.RoomCode,
+            "PlayerConnectionChanged",
+            ct);
     }
 
     /// <summary>Oturumu doğrular; oda/oyuncu eşleşmezse veya token hash tutmazsa reddeder.</summary>
@@ -337,7 +437,8 @@ public sealed class RoomService
 
     internal static void EnsureNotExpired(GameRoom room, DateTime now)
     {
-        if (room.Status == RoomStatus.Expired || (room.Status is RoomStatus.Waiting or RoomStatus.InLobby && room.ExpiresAtUtc < now))
+        if (room.Status is RoomStatus.Expired or RoomStatus.Abandoned
+            || (room.Status is RoomStatus.Waiting or RoomStatus.InLobby && room.ExpiresAtUtc < now))
         {
             throw new GameDomainException(DomainErrorCodes.RoomExpired, "Odanın süresi doldu.");
         }
@@ -355,6 +456,26 @@ public sealed class RoomService
             PayloadJson = JsonSerializer.Serialize(payload),
             OccurredAtUtc = now
         });
+    }
+
+    internal async Task SafeNotifyAsync(
+        Func<CancellationToken, Task> notifyAction,
+        string roomCode,
+        string eventName,
+        CancellationToken ct)
+    {
+        try
+        {
+            await notifyAction(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(
+                ex,
+                "SignalR yayını sırasında hata oluştu (veritabanı işlemi korundu). RoomCode: {RoomCode}, Event: {EventName}",
+                roomCode,
+                eventName);
+        }
     }
 
     internal static string NormalizeCode(string roomCode) => roomCode.Trim().ToUpperInvariant();

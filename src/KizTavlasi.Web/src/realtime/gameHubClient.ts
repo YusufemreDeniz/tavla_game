@@ -69,7 +69,7 @@ export class GameHubClient {
     const store = () => useGameStore.getState();
 
     connection.on('RoomSnapshotReceived', (snapshot: RoomSnapshotDto) => {
-      store().applySnapshot(snapshot);
+      store().applyAuthoritativeSnapshot(snapshot);
     });
 
     connection.on('GameStateUpdated', (snapshot: RoomSnapshotDto) => {
@@ -83,7 +83,9 @@ export class GameHubClient {
     connection.on(
       'StartingRollResolved',
       (payload: EnvelopeBase & { startingRoll: StartingRollDto }) => {
-        store().setStartingRoll(payload.startingRoll);
+        if (payload.stateVersion >= store().stateVersion) {
+          store().setStartingRoll(payload.startingRoll);
+        }
       },
     );
 
@@ -103,7 +105,7 @@ export class GameHubClient {
       (payload: EnvelopeBase & { roll: DiceRollResultDto }) => {
         const s = store();
         // Animasyon kuyruğuna al; eski roll eventlerini stateVersion ile reddet.
-        if (payload.roll.stateVersion > 0) {
+        if (payload.roll.stateVersion >= s.stateVersion) {
           s.setRollingPlayer(null);
           s.setPendingRoll(payload.roll);
         }
@@ -113,21 +115,27 @@ export class GameHubClient {
     connection.on(
       'MovePlayed',
       (payload: EnvelopeBase & { movePlayed: MovePlayedDto }) => {
-        store().addMovePlayed(payload.movePlayed);
+        if (payload.movePlayed.stateVersion >= store().stateVersion) {
+          store().addMovePlayed(payload.movePlayed);
+        }
       },
     );
 
     connection.on(
       'RoundEnded',
       (payload: EnvelopeBase & { roundEnded: RoundEndedDto }) => {
-        store().setRoundEnded(payload.roundEnded);
+        if (payload.stateVersion >= store().stateVersion) {
+          store().setRoundEnded(payload.roundEnded);
+        }
       },
     );
 
     connection.on(
       'MatchEnded',
       (payload: EnvelopeBase & { matchEnded: MatchEndedDto }) => {
-        store().setMatchEnded(payload.matchEnded);
+        if (payload.stateVersion >= store().stateVersion) {
+          store().setMatchEnded(payload.matchEnded);
+        }
       },
     );
 
@@ -138,10 +146,16 @@ export class GameHubClient {
       },
     );
 
+    connection.on(
+      'PlayerConnectionChanged',
+      (payload: EnvelopeBase & { playerId: string; isConnected: boolean }) => {
+        store().setPlayerConnection(payload.playerId, payload.isConnected, payload.stateVersion);
+      },
+    );
+
     // Snapshot zaten GameStateUpdated ile geliyor; bu eventler ayrıca bir işlem gerektirmiyor.
     connection.on('PlayerJoined', () => {});
     connection.on('PlayerLeft', () => {});
-    connection.on('PlayerConnectionChanged', () => {});
     connection.on('MatchStarted', () => {});
     connection.on('TurnStarted', () => {});
     connection.on('RematchRequested', () => {});
@@ -161,6 +175,12 @@ export class GameHubClient {
     return this.connection;
   }
 
+  async refreshState(): Promise<void> {
+    if (this.connection && this.connection.state === HubConnectionState.Connected) {
+      await this.connection.invoke('RejoinRoom');
+    }
+  }
+
   startMatch(): Promise<void> {
     return this.ensureConnected().invoke('StartMatch', { commandId: crypto.randomUUID() });
   }
@@ -176,6 +196,7 @@ export class GameHubClient {
     return this.ensureConnected().invoke('PlayMove', {
       pointNumber,
       expectedStateVersion,
+      commandId: crypto.randomUUID(),
     });
   }
 

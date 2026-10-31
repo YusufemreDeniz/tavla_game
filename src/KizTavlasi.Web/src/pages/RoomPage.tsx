@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { BookOpen, DoorOpen, Volume2, VolumeX } from 'lucide-react';
+import { BookOpen, DoorOpen, Volume2, VolumeX, Zap } from 'lucide-react';
 import { z } from 'zod';
 import { getPublicRoomInfo, joinRoom, leaveRoom } from '../api/rooms';
 import { ApiError } from '../api/client';
@@ -131,7 +131,7 @@ function JoinRoomView({ roomCode, onJoined }: { roomCode: string; onJoined: (tok
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl border border-gold-500/15 bg-night-800 p-6 shadow-xl"
+        className="rounded-2xl border border-gold-500/20 bg-night-800 p-6 shadow-xl"
       >
         <h1 className="mb-1 font-display text-2xl text-cream-50">{PRODUCT_NAME}</h1>
         <p className="mb-6 text-sm text-cream-300">
@@ -198,6 +198,8 @@ function ConnectedRoom({
   const setRulesOpen = useUiStore((s) => s.setRulesModalOpen);
   const soundEnabled = useUiStore((s) => s.soundEnabled);
   const toggleSound = useUiStore((s) => s.toggleSound);
+  const fastMode = useUiStore((s) => s.fastMode);
+  const toggleFastMode = useUiStore((s) => s.toggleFastMode);
 
   const hubRef = useRef<GameHubClient | null>(null);
   const [connectFailed, setConnectFailed] = useState(false);
@@ -212,8 +214,16 @@ function ConnectedRoom({
       if (!cancelled) setConnectFailed(true);
     });
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void hubRef.current?.refreshState();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       void hub.stop();
       hubRef.current = null;
       reset();
@@ -235,7 +245,8 @@ function ConnectedRoom({
         if (message.includes('Sıra sizde değil') || message.includes('NOT_YOUR_TURN')) {
           showToast('Sıra sende değil.', 'error');
         } else if (message.includes('güncel değil') || message.includes('STALE_STATE')) {
-          showToast('Oyun durumu güncelleniyor, lütfen tekrar dene.', 'error');
+          void hub.refreshState();
+          showToast('Oyun durumu senkronize edildi, hamleni tekrar yapabilirsin.', 'info');
         } else if (message.length > 0) {
           const cleaned = message.replace(/^.*HubException: /, '');
           showToast(cleaned, 'error');
@@ -257,17 +268,33 @@ function ConnectedRoom({
 
   const header = useMemo(
     () => (
-      <header className="mb-4 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-sm font-bold tracking-widest text-gold-400">{roomCode}</span>
+      <header className="mb-3 flex items-center justify-between gap-2 md:mb-4">
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg border border-gold-500/30 bg-night-800 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-gold-400">
+            {roomCode}
+          </span>
           <ConnectionBadge status={connectionStatus} />
         </div>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
+            onClick={toggleFastMode}
+            aria-label={fastMode ? 'Normal animasyon hızına geç' : 'Hızlı animasyon modunu aç'}
+            aria-pressed={fastMode}
+            title={fastMode ? 'Hızlı animasyon açık' : 'Normal animasyon hızı'}
+            className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border p-2.5 transition-colors ${
+              fastMode
+                ? 'border-gold-500/60 bg-gold-500/15 text-gold-400'
+                : 'border-night-600 text-cream-300 hover:bg-night-800'
+            }`}
+          >
+            <Zap size={16} />
+          </button>
+          <button
+            type="button"
             onClick={toggleSound}
             aria-label={soundEnabled ? 'Sesi kapat' : 'Sesi aç'}
-            className="rounded-lg border border-night-600 p-2 text-cream-300 hover:bg-night-800"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-night-600 p-2.5 text-cream-300 hover:bg-night-800"
           >
             {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
           </button>
@@ -275,7 +302,7 @@ function ConnectedRoom({
             type="button"
             onClick={() => setRulesOpen(true)}
             aria-label="Kuralları göster"
-            className="rounded-lg border border-night-600 p-2 text-cream-300 hover:bg-night-800"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-night-600 p-2.5 text-cream-300 hover:bg-night-800"
           >
             <BookOpen size={16} />
           </button>
@@ -283,14 +310,23 @@ function ConnectedRoom({
             type="button"
             onClick={handleLeave}
             aria-label="Odadan çık"
-            className="rounded-lg border border-bordo-600/50 p-2 text-rose-400 hover:bg-bordo-700/30"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-bordo-600/50 p-2.5 text-rose-400 hover:bg-bordo-700/30"
           >
             <DoorOpen size={16} />
           </button>
         </div>
       </header>
     ),
-    [roomCode, connectionStatus, soundEnabled, toggleSound, setRulesOpen, handleLeave],
+    [
+      roomCode,
+      connectionStatus,
+      fastMode,
+      toggleFastMode,
+      soundEnabled,
+      toggleSound,
+      setRulesOpen,
+      handleLeave,
+    ],
   );
 
   if (connectFailed) {
@@ -336,7 +372,7 @@ function ConnectedRoom({
   const inLobby = snapshot.status === 'Waiting' || snapshot.status === 'InLobby';
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl px-3 py-4 md:px-4 md:py-6">
+    <main className="mx-auto min-h-screen max-w-4xl px-2.5 py-3 md:px-4 md:py-6">
       {header}
 
       {connectionStatus === 'reconnecting' && (

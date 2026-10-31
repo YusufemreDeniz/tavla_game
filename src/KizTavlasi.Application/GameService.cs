@@ -11,7 +11,7 @@ namespace KizTavlasi.Application;
 /// <summary>
 /// Maç orkestrasyonu: başlatma, zar atma, bonus pul seçimi, rövanş.
 /// Tüm kural hesaplamaları <see cref="GameEngine"/> içinde; burada yalnızca
-/// doğrulama, transaction ve yayın vardır.
+/// doğrulama, transaction ve post-commit yayın vardır.
 /// </summary>
 public sealed class GameService
 {
@@ -43,20 +43,57 @@ public sealed class GameService
         _logger = logger;
     }
 
+    private sealed record MatchStartedEventPayload(
+        Guid Id,
+        Guid CommandId,
+        Guid StartingPlayerId,
+        int StartingSeat,
+        List<StartingRollAttemptDto> Attempts);
+
+    private sealed record MovePlayedEventPayload(
+        Guid PlayerId,
+        Guid? CommandId,
+        int PointNumber,
+        string Action,
+        string Remaining,
+        int PendingBonusPicks);
+
     public async Task<StartMatchResult> StartMatchAsync(PlayerSession session, Guid commandId, CancellationToken ct = default)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
-        return await ExecuteWithRetryAsync(async innerCt =>
+        var txResult = await ExecuteWithRetryAsync(async innerCt =>
         {
-            var (room, existingMatch, _) = await _roomService.LoadRoomGraphAsync(session, tracking: true, innerCt);
-            RoomService.GetValidatedPlayer(room, session);
+            var (room, existingMatch, existingRound) = await _roomService.LoadRoomGraphAsync(session, tracking: true, innerCt);
+            var player = RoomService.GetValidatedPlayer(room, session);
             RoomService.EnsureNotExpired(room, now);
 
             if (room.HostPlayerId != session.PlayerId)
             {
                 throw new GameDomainException(DomainErrorCodes.NotHost, "Maçı yalnızca oda sahibi başlatabilir.");
             }
+
+            // Idempotency: aynı CommandId ile maç zaten başlatıldıysa kayıtlı sonucu döndür.
+            if (commandId != Guid.Empty && existingMatch is not null)
+            {
+                var existingEvent = await _db.GameEvents
+                    .AsNoTracking()
+                    .Where(e => e.RoomId == room.Id && e.MatchId == existingMatch.Id && e.EventType == "MatchStarted")
+                    .OrderByDescending(e => e.Id)
+                    .FirstOrDefaultAsync(innerCt);
+
+                if (existingEvent is not null)
+                {
+                    var payload = JsonSerializer.Deserialize<MatchStartedEventPayload>(existingEvent.PayloadJson);
+                    if (payload is not null && payload.CommandId == commandId)
+                    {
+                        var replaySnapshot = SnapshotMapper.ToSnapshot(room, existingMatch, existingRound, now);
+                        var replayRoll = new StartingRollDto(payload.Attempts, payload.StartingPlayerId, payload.StartingSeat);
+                        return (Result: new StartMatchResult(replayRoll, replaySnapshot), RoomCode: room.Code, WasReplay: true);
+                    }
+                }
+            }
+
             if (room.Players.Count != 2)
             {
                 throw new GameDomainException(DomainErrorCodes.InvalidCommand, "Maç için iki oyuncu gereklidir.");
@@ -70,17 +107,35 @@ public sealed class GameService
                 throw new GameDomainException(DomainErrorCodes.RematchNotAvailable, "Bu odada yeni maç yalnızca rövanş ile başlatılabilir.");
             }
 
-            var result = await CreateMatchWithStartingRollAsync(room, now, innerCt);
+            player.LastSeenAtUtc = now;
+            var result = await CreateMatchWithStartingRollAsync(room, commandId, now, innerCt);
 
             _logger.LogInformation(
                 "Maç başlatıldı. RoomCode: {RoomCode}, MatchId: {MatchId}, StateVersion: {StateVersion}, CommandId: {CommandId}",
                 room.Code, result.Snapshot.Match?.Id, room.StateVersion, commandId);
 
-            return result;
+            return (Result: result, RoomCode: room.Code, WasReplay: false);
         }, ct);
+
+        if (!txResult.WasReplay)
+        {
+            await _roomService.SafeNotifyAsync(
+                async c =>
+                {
+                    await _notifier.StartingRollStartedAsync(txResult.RoomCode, now, c);
+                    await _notifier.MatchStartedAsync(txResult.RoomCode, txResult.Result.Snapshot, c);
+                    await _notifier.StartingRollResolvedAsync(txResult.RoomCode, txResult.Result.StartingRoll, txResult.Result.Snapshot, c);
+                },
+                txResult.RoomCode,
+                "MatchStarted",
+                ct);
+        }
+
+        return txResult.Result;
     }
 
-    private async Task<StartMatchResult> CreateMatchWithStartingRollAsync(GameRoom room, DateTime now, CancellationToken ct)
+    private async Task<StartMatchResult> CreateMatchWithStartingRollAsync(
+        GameRoom room, Guid commandId, DateTime now, CancellationToken ct)
     {
         var matchNumber = await _db.Matches.CountAsync(m => m.RoomId == room.Id, ct) + 1;
         var players = room.Players.OrderBy(p => p.Seat).ToList();
@@ -112,20 +167,27 @@ public sealed class GameService
         _db.Matches.Add(match);
         _db.Rounds.Add(round);
 
+        var attemptsDto = startingRoll.Attempts
+            .Select(a => new StartingRollAttemptDto(a.Player1Die, a.Player2Die, a.IsTie))
+            .ToList();
+
         var startingRollDto = new StartingRollDto(
-            startingRoll.Attempts.Select(a => new StartingRollAttemptDto(a.Player1Die, a.Player2Die, a.IsTie)).ToList(),
+            attemptsDto,
             startingPlayer.Id,
             startingRoll.StartingSeat);
 
-        _roomService.AddEvent(room.Id, match.Id, round.Id, room.StateVersion, "MatchStarted",
-            new { match.Id, startingRollDto.StartingPlayerId, Attempts = startingRollDto.Attempts }, now);
+        _roomService.AddEvent(
+            room.Id,
+            match.Id,
+            round.Id,
+            room.StateVersion,
+            "MatchStarted",
+            new MatchStartedEventPayload(match.Id, commandId, startingRollDto.StartingPlayerId, startingRollDto.StartingSeat, attemptsDto),
+            now);
 
         await _db.SaveChangesAsync(ct);
 
         var snapshot = SnapshotMapper.ToSnapshot(room, match, round, now);
-        await _notifier.MatchStartedAsync(room.Code, snapshot, ct);
-        await _notifier.StartingRollResolvedAsync(room.Code, startingRollDto, snapshot, ct);
-
         return new StartMatchResult(startingRollDto, snapshot);
     }
 
@@ -154,21 +216,42 @@ public sealed class GameService
     public async Task<RollDiceResult> RollDiceAsync(
         PlayerSession session, Guid commandId, long expectedStateVersion, CancellationToken ct = default)
     {
+        if (commandId == Guid.Empty)
+        {
+            throw new GameDomainException(DomainErrorCodes.InvalidCommand, "CommandId zorunludur.");
+        }
+
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
-        return await ExecuteWithRetryAsync(async innerCt =>
+        var txResult = await ExecuteWithRetryAsync(async innerCt =>
         {
-            // Idempotency: aynı komut daha önce işlendiyse kayıtlı sonucu döndür.
-            var existingRoll = await _db.DiceRolls.AsNoTracking()
+            // Idempotency: aynı komut daha önce işlendiyse sahipliğini doğrula ve kayıtlı sonucu döndür.
+            var existingRoll = await _db.DiceRolls
+                .AsNoTracking()
+                .Include(d => d.Round)
+                .ThenInclude(r => r.Match)
                 .FirstOrDefaultAsync(d => d.CommandId == commandId, innerCt);
+
             if (existingRoll is not null)
             {
+                if (existingRoll.PlayerId != session.PlayerId || existingRoll.Round.Match.RoomId != session.RoomId)
+                {
+                    throw new GameDomainException(
+                        DomainErrorCodes.InvalidCommand,
+                        "Bu komut kimliği başka bir oyuncu veya odaya ait.");
+                }
+
                 var (roomForReplay, matchForReplay, roundForReplay) =
                     await _roomService.LoadRoomGraphAsync(session, tracking: false, innerCt);
                 var replaySnapshot = SnapshotMapper.ToSnapshot(roomForReplay, matchForReplay, roundForReplay, now);
                 var storedResult = JsonSerializer.Deserialize<DiceRollResultDto>(existingRoll.ResolutionJson)
                     ?? throw new GameDomainException(DomainErrorCodes.InvalidCommand, "Kayıtlı zar sonucu okunamadı.");
-                return new RollDiceResult(storedResult, replaySnapshot, WasAlreadyProcessed: true);
+
+                return (
+                    Result: new RollDiceResult(storedResult, replaySnapshot, WasAlreadyProcessed: true),
+                    RoomCode: roomForReplay.Code,
+                    OpponentId: Guid.Empty,
+                    TurnNumber: 0);
             }
 
             var (room, match, round) = await _roomService.LoadRoomGraphAsync(session, tracking: true, innerCt);
@@ -183,6 +266,7 @@ public sealed class GameService
                     "Önce mevcut hamlelerinizi oynamalısınız.");
             }
 
+            player.LastSeenAtUtc = now;
             var playerState = round.PlayerStates.First(s => s.PlayerId == player.Id);
             var board = playerState.ToBoard();
 
@@ -244,27 +328,84 @@ public sealed class GameService
             var (freshRoom, freshMatch, freshRound) = await _roomService.LoadRoomGraphAsync(session, tracking: false, innerCt);
             var snapshot = SnapshotMapper.ToSnapshot(freshRoom, freshMatch, freshRound, now);
 
-            await _notifier.DiceRollResolvedAsync(room.Code, rollResult, snapshot, innerCt);
-
-            if (outcome.TurnWasted)
-            {
-                await _notifier.TurnStartedAsync(room.Code, opponent.Id, round.TurnNumber, snapshot, innerCt);
-            }
-
-            return new RollDiceResult(rollResult, snapshot, WasAlreadyProcessed: false);
+            return (
+                Result: new RollDiceResult(rollResult, snapshot, WasAlreadyProcessed: false),
+                RoomCode: room.Code,
+                OpponentId: opponent.Id,
+                TurnNumber: round.TurnNumber);
         }, ct);
+
+        if (!txResult.Result.WasAlreadyProcessed)
+        {
+            await _roomService.SafeNotifyAsync(
+                async c =>
+                {
+                    await _notifier.DiceRollStartedAsync(txResult.RoomCode, session.PlayerId, now, c);
+                    await _notifier.DiceRollResolvedAsync(txResult.RoomCode, txResult.Result.Roll, txResult.Result.Snapshot, c);
+
+                    if (txResult.Result.Roll.TurnWasted)
+                    {
+                        await _notifier.TurnStartedAsync(txResult.RoomCode, txResult.OpponentId, txResult.TurnNumber, txResult.Result.Snapshot, c);
+                    }
+                },
+                txResult.RoomCode,
+                "DiceRollResolved",
+                ct);
+        }
+
+        return txResult.Result;
     }
 
     /// <summary>
     /// Oyuncunun haneye dokunarak yaptığı hamle: zar hamlesi veya çift bonusu hakkı.
     /// </summary>
     public async Task<RoomSnapshotDto> PlayMoveAsync(
-        PlayerSession session, int pointNumber, long expectedStateVersion, CancellationToken ct = default)
+        PlayerSession session,
+        int pointNumber,
+        long expectedStateVersion,
+        CancellationToken ct = default,
+        Guid? commandId = null)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
-        return await ExecuteWithRetryAsync(async innerCt =>
+        var txResult = await ExecuteWithRetryAsync(async innerCt =>
         {
+            if (commandId is Guid cid && cid != Guid.Empty)
+            {
+                var recentMoves = await _db.GameEvents
+                    .AsNoTracking()
+                    .Where(e => e.EventType == "MovePlayed" && e.PayloadJson.Contains(cid.ToString()))
+                    .OrderByDescending(e => e.Id)
+                    .Take(5)
+                    .ToListAsync(innerCt);
+
+                foreach (var evt in recentMoves)
+                {
+                    var payload = JsonSerializer.Deserialize<MovePlayedEventPayload>(evt.PayloadJson);
+                    if (payload?.CommandId == cid)
+                    {
+                        if (evt.RoomId != session.RoomId || payload.PlayerId != session.PlayerId)
+                        {
+                            throw new GameDomainException(
+                                DomainErrorCodes.InvalidCommand,
+                                "Bu komut kimliği başka bir oyuncu veya odaya ait.");
+                        }
+
+                        var (replayRoom, replayMatch, replayRound) =
+                            await _roomService.LoadRoomGraphAsync(session, tracking: false, innerCt);
+                        var replaySnapshot = SnapshotMapper.ToSnapshot(replayRoom, replayMatch, replayRound, now);
+                        return (
+                            Snapshot: replaySnapshot,
+                            RoomCode: replayRoom.Code,
+                            MovePlayed: (MovePlayedDto?)null,
+                            RoundEnded: (RoundEndedDto?)null,
+                            MatchEnded: (MatchEndedDto?)null,
+                            NextTurnPlayerId: (Guid?)null,
+                            NextTurnNumber: 0);
+                    }
+                }
+            }
+
             var (room, match, round) = await _roomService.LoadRoomGraphAsync(session, tracking: true, innerCt);
             var player = RoomService.GetValidatedPlayer(room, session);
 
@@ -294,6 +435,7 @@ public sealed class GameService
                 throw new GameDomainException(DomainErrorCodes.InvalidCommand, "Oynanacak hamlen yok; zar at.");
             }
 
+            player.LastSeenAtUtc = now;
             var playerState = round.PlayerStates.First(s => s.PlayerId == player.Id);
             var board = playerState.ToBoard();
 
@@ -350,27 +492,71 @@ public sealed class GameService
                 board.IsCompleted,
                 room.StateVersion);
 
-            _roomService.AddEvent(room.Id, match.Id, round.Id, room.StateVersion, "MovePlayed",
-                new { player.Id, pointNumber, action = step.Action.ToString(), remaining = round.PendingDice, round.PendingBonusPicks }, now);
+            _roomService.AddEvent(
+                room.Id,
+                match.Id,
+                round.Id,
+                room.StateVersion,
+                "MovePlayed",
+                new MovePlayedEventPayload(player.Id, commandId, pointNumber, step.Action.ToString(), round.PendingDice, round.PendingBonusPicks),
+                now);
 
             await _db.SaveChangesAsync(innerCt);
 
             var (freshRoom, freshMatch, freshRound) = await _roomService.LoadRoomGraphAsync(session, tracking: false, innerCt);
             var snapshot = SnapshotMapper.ToSnapshot(freshRoom, freshMatch, freshRound, now);
 
-            await _notifier.MovePlayedAsync(room.Code, movePlayed, snapshot, innerCt);
-            await NotifyRoundOutcomeAsync(room.Code, roundEnded, matchEnded, freshRound, snapshot, innerCt);
-
+            Guid? nextTurnPlayerId = null;
+            var nextTurnNumber = 0;
             if (roundEnded is null && matchEnded is null && pendingDice.Count == 0 && round.PendingBonusPicks == 0)
             {
-                await _notifier.TurnStartedAsync(room.Code, opponent.Id, round.TurnNumber, snapshot, innerCt);
+                nextTurnPlayerId = opponent.Id;
+                nextTurnNumber = round.TurnNumber;
+            }
+            else if (roundEnded is not null && matchEnded is null && freshRound?.CurrentPlayerId is not null)
+            {
+                nextTurnPlayerId = freshRound.CurrentPlayerId.Value;
+                nextTurnNumber = freshRound.TurnNumber;
             }
 
-            return snapshot;
+            return (
+                Snapshot: snapshot,
+                RoomCode: room.Code,
+                MovePlayed: (MovePlayedDto?)movePlayed,
+                RoundEnded: roundEnded,
+                MatchEnded: matchEnded,
+                NextTurnPlayerId: nextTurnPlayerId,
+                NextTurnNumber: nextTurnNumber);
         }, ct);
+
+        if (txResult.MovePlayed is not null)
+        {
+            await _roomService.SafeNotifyAsync(
+                async c =>
+                {
+                    await _notifier.MovePlayedAsync(txResult.RoomCode, txResult.MovePlayed, txResult.Snapshot, c);
+                    if (txResult.RoundEnded is not null)
+                    {
+                        await _notifier.RoundEndedAsync(txResult.RoomCode, txResult.RoundEnded, txResult.Snapshot, c);
+                    }
+                    if (txResult.MatchEnded is not null)
+                    {
+                        await _notifier.MatchEndedAsync(txResult.RoomCode, txResult.MatchEnded, txResult.Snapshot, c);
+                    }
+                    if (txResult.NextTurnPlayerId is Guid nextPlayerId)
+                    {
+                        await _notifier.TurnStartedAsync(txResult.RoomCode, nextPlayerId, txResult.NextTurnNumber, txResult.Snapshot, c);
+                    }
+                },
+                txResult.RoomCode,
+                "MovePlayed",
+                ct);
+        }
+
+        return txResult.Snapshot;
     }
 
-    private void ValidateActiveTurn(GameRoom room, Match? match, Round? round, Player player, long expectedStateVersion)
+    private static void ValidateActiveTurn(GameRoom room, Match? match, Round? round, Player player, long expectedStateVersion)
     {
         if (match is null || match.Status != MatchStatus.InProgress)
         {
@@ -443,36 +629,14 @@ public sealed class GameService
         return (roundEnded, matchEnded);
     }
 
-    private async Task NotifyRoundOutcomeAsync(
-        string roomCode,
-        RoundEndedDto? roundEnded,
-        MatchEndedDto? matchEnded,
-        Round? freshRound,
-        RoomSnapshotDto snapshot,
-        CancellationToken ct)
-    {
-        if (roundEnded is not null)
-        {
-            await _notifier.RoundEndedAsync(roomCode, roundEnded, snapshot, ct);
-        }
-        if (matchEnded is not null)
-        {
-            await _notifier.MatchEndedAsync(roomCode, matchEnded, snapshot, ct);
-        }
-        else if (roundEnded is not null && freshRound is not null && freshRound.CurrentPlayerId is not null)
-        {
-            await _notifier.TurnStartedAsync(roomCode, freshRound.CurrentPlayerId.Value, freshRound.TurnNumber, snapshot, ct);
-        }
-    }
-
     public async Task<RoomSnapshotDto> RequestRematchAsync(PlayerSession session, CancellationToken ct = default)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
-        return await ExecuteWithRetryAsync(async innerCt =>
+        var txResult = await ExecuteWithRetryAsync(async innerCt =>
         {
             var (room, match, round) = await _roomService.LoadRoomGraphAsync(session, tracking: true, innerCt);
-            RoomService.GetValidatedPlayer(room, session);
+            var player = RoomService.GetValidatedPlayer(room, session);
 
             if (room.Status != RoomStatus.Completed || match is null || match.Status != MatchStatus.Completed)
             {
@@ -487,25 +651,33 @@ public sealed class GameService
                 throw new GameDomainException(DomainErrorCodes.RematchNotAvailable, "Rövanş isteği zaten gönderildi.");
             }
 
+            player.LastSeenAtUtc = now;
             room.RematchRequestedByPlayerId = session.PlayerId;
             room.StateVersion++;
             _roomService.AddEvent(room.Id, match.Id, null, room.StateVersion, "RematchRequested", new { session.PlayerId }, now);
             await _db.SaveChangesAsync(innerCt);
 
             var snapshot = SnapshotMapper.ToSnapshot(room, match, round, now);
-            await _notifier.RematchRequestedAsync(room.Code, session.PlayerId, snapshot, innerCt);
-            return snapshot;
+            return (Snapshot: snapshot, RoomCode: room.Code);
         }, ct);
+
+        await _roomService.SafeNotifyAsync(
+            c => _notifier.RematchRequestedAsync(txResult.RoomCode, session.PlayerId, txResult.Snapshot, c),
+            txResult.RoomCode,
+            "RematchRequested",
+            ct);
+
+        return txResult.Snapshot;
     }
 
     public async Task<StartMatchResult> AcceptRematchAsync(PlayerSession session, CancellationToken ct = default)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
-        return await ExecuteWithRetryAsync(async innerCt =>
+        var txResult = await ExecuteWithRetryAsync(async innerCt =>
         {
             var (room, match, _) = await _roomService.LoadRoomGraphAsync(session, tracking: true, innerCt);
-            RoomService.GetValidatedPlayer(room, session);
+            var player = RoomService.GetValidatedPlayer(room, session);
 
             if (room.RematchRequestedByPlayerId is null || match is null || match.Status != MatchStatus.Completed)
             {
@@ -516,22 +688,36 @@ public sealed class GameService
                 throw new GameDomainException(DomainErrorCodes.RematchNotAvailable, "Kendi rövanş isteğinizi kabul edemezsiniz.");
             }
 
-            var result = await CreateMatchWithStartingRollAsync(room, now, innerCt);
-            await _notifier.RematchAcceptedAsync(room.Code, result.Snapshot, innerCt);
+            player.LastSeenAtUtc = now;
+            var result = await CreateMatchWithStartingRollAsync(room, Guid.Empty, now, innerCt);
 
             _logger.LogInformation("Rövanş kabul edildi. RoomCode: {RoomCode}, PlayerId: {PlayerId}", room.Code, session.PlayerId);
-            return result;
+            return (Result: result, RoomCode: room.Code);
         }, ct);
+
+        await _roomService.SafeNotifyAsync(
+            async c =>
+            {
+                await _notifier.RematchAcceptedAsync(txResult.RoomCode, txResult.Result.Snapshot, c);
+                await _notifier.StartingRollStartedAsync(txResult.RoomCode, now, c);
+                await _notifier.MatchStartedAsync(txResult.RoomCode, txResult.Result.Snapshot, c);
+                await _notifier.StartingRollResolvedAsync(txResult.RoomCode, txResult.Result.StartingRoll, txResult.Result.Snapshot, c);
+            },
+            txResult.RoomCode,
+            "RematchAccepted",
+            ct);
+
+        return txResult.Result;
     }
 
     public async Task<RoomSnapshotDto> DeclineRematchAsync(PlayerSession session, CancellationToken ct = default)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
-        return await ExecuteWithRetryAsync(async innerCt =>
+        var txResult = await ExecuteWithRetryAsync(async innerCt =>
         {
             var (room, match, round) = await _roomService.LoadRoomGraphAsync(session, tracking: true, innerCt);
-            RoomService.GetValidatedPlayer(room, session);
+            var player = RoomService.GetValidatedPlayer(room, session);
 
             if (room.RematchRequestedByPlayerId is null)
             {
@@ -542,15 +728,23 @@ public sealed class GameService
                 throw new GameDomainException(DomainErrorCodes.RematchNotAvailable, "Kendi rövanş isteğinizi reddedemezsiniz.");
             }
 
+            player.LastSeenAtUtc = now;
             room.RematchRequestedByPlayerId = null;
             room.StateVersion++;
             _roomService.AddEvent(room.Id, match?.Id, null, room.StateVersion, "RematchDeclined", new { session.PlayerId }, now);
             await _db.SaveChangesAsync(innerCt);
 
             var snapshot = SnapshotMapper.ToSnapshot(room, match, round, now);
-            await _notifier.RematchDeclinedAsync(room.Code, session.PlayerId, snapshot, innerCt);
-            return snapshot;
+            return (Snapshot: snapshot, RoomCode: room.Code);
         }, ct);
+
+        await _roomService.SafeNotifyAsync(
+            c => _notifier.RematchDeclinedAsync(txResult.RoomCode, session.PlayerId, txResult.Snapshot, c),
+            txResult.RoomCode,
+            "RematchDeclined",
+            ct);
+
+        return txResult.Snapshot;
     }
 
     /// <summary>

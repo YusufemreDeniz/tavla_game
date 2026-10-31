@@ -136,6 +136,66 @@ public class SignalRTests
     }
 
     [Fact]
+    public async Task Sirasi_olmayan_oyuncu_zar_isterse_DiceRollStarted_yayinlanmaz()
+    {
+        var (_, hostToken, guestToken) = await CreateFullRoomAsync();
+
+        await using var hostConnection = CreateHubConnection(hostToken);
+        await using var guestConnection = CreateHubConnection(guestToken);
+
+        var startingResolved = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+        hostConnection.On<JsonElement>("StartingRollResolved", p => startingResolved.TrySetResult(p));
+
+        var rollStartedCount = 0;
+        hostConnection.On<JsonElement>("DiceRollStarted", _ => Interlocked.Increment(ref rollStartedCount));
+
+        await hostConnection.StartAsync();
+        await guestConnection.StartAsync();
+        await hostConnection.InvokeAsync("JoinRoom");
+        await guestConnection.InvokeAsync("JoinRoom");
+
+        _fixture.Dice.Enqueue(6, 2); // Sıra Host'ta (Seat 1).
+        await hostConnection.InvokeAsync("StartMatch", new { CommandId = Guid.NewGuid() });
+        var startingEvent = await WaitForAsync(startingResolved);
+        var stateVersion = startingEvent.GetProperty("stateVersion").GetInt64();
+
+        // Guest (sırası değil) zar atmayı dener → HubException almalı ve odaya DiceRollStarted gitmemeli.
+        var act = () => guestConnection.InvokeAsync("RollDice", new { CommandId = Guid.NewGuid(), ExpectedStateVersion = stateVersion });
+        await act.Should().ThrowAsync<HubException>();
+
+        await Task.Delay(200);
+        rollStartedCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Coklu_sekme_baglantisinda_eski_baglanti_kapaninca_oyuncu_bagli_kalir()
+    {
+        var (_, hostToken, guestToken) = await CreateFullRoomAsync();
+
+        await using var hostConnection = CreateHubConnection(hostToken);
+        await hostConnection.StartAsync();
+        await hostConnection.InvokeAsync("JoinRoom");
+
+        var guestTab1 = CreateHubConnection(guestToken);
+        await using var guestTab2 = CreateHubConnection(guestToken);
+
+        await guestTab1.StartAsync();
+        await guestTab2.StartAsync();
+
+        // İlk sekme kapanır; ikinci sekme hâlâ açık.
+        await guestTab1.DisposeAsync();
+
+        var snapshotReceived = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+        hostConnection.On<JsonElement>("RoomSnapshotReceived", p => snapshotReceived.TrySetResult(p));
+        await hostConnection.InvokeAsync("JoinRoom");
+
+        var snapshot = await WaitForAsync(snapshotReceived);
+        var players = snapshot.GetProperty("players").EnumerateArray().ToList();
+        players.Should().HaveCount(2);
+        players.All(p => p.GetProperty("isConnected").GetBoolean()).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Rejoin_sonrasi_guncel_snapshot_gelir()
     {
         var (roomCode, hostToken, guestToken) = await CreateFullRoomAsync();

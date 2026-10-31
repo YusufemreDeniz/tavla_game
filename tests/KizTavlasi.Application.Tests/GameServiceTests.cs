@@ -110,6 +110,7 @@ public class GameServiceTests : IDisposable
         result.Snapshot.Status.Should().Be("Playing");
         result.Snapshot.Match!.CurrentRound!.CurrentPlayerId.Should().Be(sessions.Host.PlayerId);
         _harness.Notifier.Events.Should().Contain("MatchStarted").And.Contain("StartingRollResolved");
+        _harness.Notifier.AnyNotificationInsideTransaction.Should().BeFalse();
     }
 
     [Fact]
@@ -121,6 +122,20 @@ public class GameServiceTests : IDisposable
 
         (await act.Should().ThrowAsync<GameDomainException>())
             .Which.Code.Should().Be(DomainErrorCodes.NotHost);
+    }
+
+    [Fact]
+    public async Task StartMatch_ayni_command_id_ile_tekrar_cagrilirsa_idempotent_sonuc_doner()
+    {
+        var (sessions, _) = await CreateFullRoomAsync();
+        var commandId = Guid.NewGuid();
+        _harness.Dice.Enqueue(6, 2);
+
+        var first = await _harness.GameService.StartMatchAsync(sessions.Host, commandId);
+        var second = await _harness.GameService.StartMatchAsync(sessions.Host, commandId);
+
+        second.Snapshot.StateVersion.Should().Be(first.Snapshot.StateVersion);
+        second.StartingRoll.StartingPlayerId.Should().Be(first.StartingRoll.StartingPlayerId);
     }
 
     [Fact]
@@ -181,6 +196,28 @@ public class GameServiceTests : IDisposable
         afterSecond.Match!.CurrentRound!.PendingDice.Should().BeEmpty();
         afterSecond.Match.CurrentRound.CurrentPlayerId.Should().Be(sessions.Guest.PlayerId);
         _harness.Notifier.Events.Should().Contain("MovePlayed");
+        _harness.Notifier.AnyNotificationInsideTransaction.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SignalR_yayin_hatasi_commit_edilmis_oyun_islemini_bozmaz()
+    {
+        var (sessions, _) = await CreateFullRoomAsync();
+        _harness.Dice.Enqueue(6, 2);
+        var started = await _harness.GameService.StartMatchAsync(sessions.Host, Guid.NewGuid());
+
+        _harness.Notifier.ThrowOnNotify = true;
+        _harness.Dice.Enqueue(3, 5);
+
+        var roll = await _harness.GameService.RollDiceAsync(
+            sessions.Host, Guid.NewGuid(), started.Snapshot.StateVersion);
+
+        roll.Roll.PlayableDice.Should().Equal(3, 5);
+
+        // Veritabanında işlem kalıcı olarak commit edilmiş olmalı.
+        var freshState = await _harness.RoomService.GetRoomStateAsync(sessions.Host);
+        freshState.StateVersion.Should().Be(roll.Snapshot.StateVersion);
+        freshState.Match!.CurrentRound!.PendingDice.Should().Equal(3, 5);
     }
 
     [Fact]
@@ -256,6 +293,42 @@ public class GameServiceTests : IDisposable
         second.Roll.Die1.Should().Be(first.Roll.Die1);
         second.Roll.Die2.Should().Be(first.Roll.Die2);
         second.Snapshot.StateVersion.Should().Be(first.Snapshot.StateVersion);
+    }
+
+    [Fact]
+    public async Task Baska_oyuncunun_command_id_degeri_ile_zar_atilamaz()
+    {
+        var (sessions, _) = await CreateFullRoomAsync();
+        _harness.Dice.Enqueue(6, 2);
+        var started = await _harness.GameService.StartMatchAsync(sessions.Host, Guid.NewGuid());
+
+        var hostCommandId = Guid.NewGuid();
+        _harness.Dice.Enqueue(3, 5);
+        await _harness.GameService.RollDiceAsync(sessions.Host, hostCommandId, started.Snapshot.StateVersion);
+
+        // Guest, Host'un kullandığı CommandId'yi kendi adına göndermeye çalışırsa reddedilmelidir.
+        var act = () => _harness.GameService.RollDiceAsync(sessions.Guest, hostCommandId, started.Snapshot.StateVersion + 1);
+
+        (await act.Should().ThrowAsync<GameDomainException>())
+            .Which.Code.Should().Be(DomainErrorCodes.InvalidCommand);
+    }
+
+    [Fact]
+    public async Task PlayMove_ayni_command_id_ile_tekrar_cagrilirsa_idempotent_sonuc_doner()
+    {
+        var (sessions, _) = await CreateFullRoomAsync();
+        _harness.Dice.Enqueue(6, 2);
+        var started = await _harness.GameService.StartMatchAsync(sessions.Host, Guid.NewGuid());
+
+        _harness.Dice.Enqueue(4, 6);
+        var rolled = await _harness.GameService.RollDiceAsync(sessions.Host, Guid.NewGuid(), started.Snapshot.StateVersion);
+
+        var moveCommandId = Guid.NewGuid();
+        var afterFirst = await _harness.GameService.PlayMoveAsync(sessions.Host, 4, rolled.Snapshot.StateVersion, commandId: moveCommandId);
+        var afterRetry = await _harness.GameService.PlayMoveAsync(sessions.Host, 4, rolled.Snapshot.StateVersion, commandId: moveCommandId);
+
+        afterRetry.StateVersion.Should().Be(afterFirst.StateVersion);
+        afterRetry.Match!.CurrentRound!.PendingDice.Should().Equal(6);
     }
 
     [Fact]

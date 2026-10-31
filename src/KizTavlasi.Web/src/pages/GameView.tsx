@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Home, RotateCcw, Trophy } from 'lucide-react';
+import { Home, RotateCcw, Sparkles, Trophy, WifiOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { RoomSnapshotDto } from '../types/game';
 import { useGameStore } from '../store/gameStore';
@@ -14,6 +14,7 @@ import { ReactionsBar } from '../components/ReactionsBar';
 import {
   playCollectSound,
   playDiceSound,
+  playDoubleSound,
   playLoseSound,
   playPieceSound,
   playWinSound,
@@ -54,10 +55,21 @@ export default function GameView({
   const history = useGameStore((s) => s.history);
   const addHistory = useGameStore((s) => s.addHistory);
   const soundEnabled = useUiStore((s) => s.soundEnabled);
+  const fastMode = useUiStore((s) => s.fastMode);
 
   const [displayedDice, setDisplayedDice] = useState<[number, number] | null>(null);
   const [rollInProgress, setRollInProgress] = useState(false);
+  const [moveInProgressVersion, setMoveInProgressVersion] = useState<number | null>(null);
   const [moveFlash, setMoveFlash] = useState<(PointFlash & { playerId: string }) | null>(null);
+  const rollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (rollTimeoutRef.current) {
+        clearTimeout(rollTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const match = snapshot.match;
   const round = match?.currentRound ?? null;
@@ -74,30 +86,50 @@ export default function GameView({
   const pendingDice = useMemo(() => roundPendingDice ?? [], [roundPendingDice]);
   const pendingPicks = round?.pendingBonusPicks ?? 0;
   const hasPendingMoves = pendingDice.length > 0 || pendingPicks > 0;
+  const moveInProgress = moveInProgressVersion === snapshot.stateVersion;
   const iMustMove = isMyTurn && hasPendingMoves;
   const opponentMoving = !isMyTurn && hasPendingMoves && round?.status === 'InProgress';
 
-  /** Tıklanabilir haneler: önce bekleyen zarlar, sonra serbest haklar. */
+  /**
+   * Tıklanabilir haneler:
+   * - Bekleyen zar varsa o zarlar arasından şu anki aşamada oynanabilir olanlar
+   *   (aynı zar turunda son indirme tamamlandığında diğer zar hemen ardından parlar).
+   * - Serbest çift bonusu varsa oynanabilir tüm haneler.
+   */
   const clickablePoints = useMemo(() => {
-    if (!iMustMove || !myBoard || matchCompleted) return [];
+    if (!iMustMove || moveInProgress || !myBoard || matchCompleted) return [];
+    const canPlayPoint = (pointNumber: number) => {
+      const pt = myBoard.points.find((p) => p.pointNumber === pointNumber);
+      if (!pt) return false;
+      return myBoard.isCollecting ? pt.backCount + pt.frontCount > 0 : pt.backCount > 1;
+    };
+
     if (pendingDice.length > 0) {
-      return [...new Set(pendingDice)];
+      const currentlyPlayable = [...new Set(pendingDice)].filter(canPlayPoint);
+      return currentlyPlayable.length > 0 ? currentlyPlayable : [...new Set(pendingDice)];
     }
-    return myBoard.points
-      .filter((p) => (myBoard.isCollecting ? p.backCount + p.frontCount > 0 : p.backCount > 1))
-      .map((p) => p.pointNumber);
-  }, [iMustMove, myBoard, matchCompleted, pendingDice]);
+
+    return myBoard.points.filter((p) => canPlayPoint(p.pointNumber)).map((p) => p.pointNumber);
+  }, [iMustMove, moveInProgress, myBoard, matchCompleted, pendingDice]);
 
   // Zar sonucu geldiğinde: ses, geçmiş ve zar yüzleri.
   useEffect(() => {
     if (!pendingRoll) return;
+
+    if (rollTimeoutRef.current) {
+      clearTimeout(rollTimeoutRef.current);
+      rollTimeoutRef.current = null;
+    }
 
     const roller = players.find((p) => p.id === pendingRoll.playerId);
     const rollerName = roller?.displayName ?? 'Oyuncu';
     setDisplayedDice([pendingRoll.die1, pendingRoll.die2]);
     setRollInProgress(false);
 
-    if (soundEnabled) playDiceSound();
+    if (soundEnabled) {
+      if (pendingRoll.isDouble) playDoubleSound();
+      else playDiceSound();
+    }
 
     addHistory(
       `${rollerName} ${pendingRoll.die1}-${pendingRoll.die2} attı${pendingRoll.isDouble ? ' (çift!)' : ''}`,
@@ -144,9 +176,9 @@ export default function GameView({
   // Flaş kısa süre sonra sönsün.
   useEffect(() => {
     if (!moveFlash) return;
-    const timer = setTimeout(() => setMoveFlash(null), 900);
+    const timer = setTimeout(() => setMoveFlash(null), fastMode ? 450 : 900);
     return () => clearTimeout(timer);
-  }, [moveFlash]);
+  }, [moveFlash, fastMode]);
 
   // El sonucu bildirimi.
   useEffect(() => {
@@ -156,29 +188,40 @@ export default function GameView({
       else playLoseSound();
     }
     if (!lastRoundEnded.matchCompleted) {
-      const timer = setTimeout(() => setRoundEnded(null), lastRoundEnded.isMars ? 4600 : 3200);
+      const duration = fastMode
+        ? lastRoundEnded.isMars
+          ? 2400
+          : 1700
+        : lastRoundEnded.isMars
+          ? 4600
+          : 3200;
+      const timer = setTimeout(() => setRoundEnded(null), duration);
       return () => clearTimeout(timer);
     }
-  }, [lastRoundEnded, myPlayerId, soundEnabled, setRoundEnded]);
+  }, [lastRoundEnded, myPlayerId, soundEnabled, fastMode, setRoundEnded]);
 
   // Sıra el değiştirince gösterilen zarları temizle.
   useEffect(() => {
-    if (!hasPendingMoves) {
-      const timer = setTimeout(() => setDisplayedDice(null), 1600);
+    if (!hasPendingMoves && displayedDice !== null) {
+      const timer = setTimeout(() => setDisplayedDice(null), fastMode ? 900 : 1600);
       return () => clearTimeout(timer);
     }
-  }, [hasPendingMoves, round?.currentPlayerId]);
+  }, [hasPendingMoves, displayedDice, fastMode, round?.currentPlayerId]);
 
   const handleRoll = () => {
     if (!isMyTurn || rollInProgress || iMustMove) return;
     setRollInProgress(true);
     setDisplayedDice(null);
     onRollDice(snapshot.stateVersion);
-    setTimeout(() => setRollInProgress(false), 4000);
+    if (rollTimeoutRef.current) {
+      clearTimeout(rollTimeoutRef.current);
+    }
+    rollTimeoutRef.current = setTimeout(() => setRollInProgress(false), 4000);
   };
 
   const handlePickPoint = (pointNumber: number) => {
-    if (!iMustMove) return;
+    if (!iMustMove || moveInProgress) return;
+    setMoveInProgressVersion(snapshot.stateVersion);
     onPlayMove(pointNumber, snapshot.stateVersion);
   };
 
@@ -211,6 +254,8 @@ export default function GameView({
       ? lastRoundEnded.winnerPlayerId === myPlayerId
       : winnerPlayer?.id === myPlayerId;
 
+  const totalRemainingMoves = pendingDice.length + pendingPicks;
+
   const statusText = matchCompleted
     ? 'Maç bitti'
     : iMustMove
@@ -225,11 +270,18 @@ export default function GameView({
 
   const centerContent = (
     <div className="flex w-full items-center justify-between gap-2 md:gap-4">
-      <p className="min-w-0 flex-1 truncate text-[11px] font-medium text-cream-200 md:text-sm" role="status">
-        {statusText}
-      </p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[11px] font-medium text-cream-100 md:text-sm" role="status">
+          {statusText}
+        </p>
+        {totalRemainingMoves > 0 && (
+          <p className="mt-0.5 text-[10px] font-semibold text-gold-400">
+            Kalan hamle hakkı: {totalRemainingMoves}
+          </p>
+        )}
+      </div>
 
-      <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
+      <div className="flex shrink-0 items-center gap-1.5 md:gap-2.5">
         {rollingPlayerId || rollInProgress ? (
           <>
             <Die value={1} rolling size={42} />
@@ -237,8 +289,16 @@ export default function GameView({
           </>
         ) : displayedDice ? (
           <>
-            <Die value={displayedDice[0]} size={42} />
-            <Die value={displayedDice[1]} size={42} />
+            <Die
+              value={displayedDice[0]}
+              size={42}
+              highlight={displayedDice[0] === displayedDice[1]}
+            />
+            <Die
+              value={displayedDice[1]}
+              size={42}
+              highlight={displayedDice[0] === displayedDice[1]}
+            />
           </>
         ) : null}
       </div>
@@ -251,7 +311,7 @@ export default function GameView({
           aria-label="Zar at"
           className={`min-h-11 shrink-0 rounded-xl px-3.5 py-2 text-sm font-bold shadow-lg transition-all md:px-6 md:text-base ${
             isMyTurn && !rollInProgress && !iMustMove
-              ? 'bg-gradient-to-r from-copper-500 to-bordo-600 text-cream-50 hover:scale-[1.04]'
+              ? 'bg-gradient-to-r from-copper-500 via-bordo-600 to-bordo-700 text-cream-50 ring-1 ring-gold-500/40 hover:scale-[1.03]'
               : 'cursor-not-allowed bg-night-900/70 text-cream-400/50'
           }`}
         >
@@ -267,30 +327,50 @@ export default function GameView({
       {match && (
         <section
           aria-label="Skor"
-          className="flex items-center justify-between rounded-2xl border border-gold-500/15 bg-night-800 px-4 py-3"
+          className="flex items-center justify-between rounded-2xl border border-gold-500/20 bg-gradient-to-b from-night-800 to-night-900 px-3.5 py-3 shadow-lg md:px-5"
         >
           <PlayerScore
             name={players.find((p) => p.seat === 1)?.displayName ?? '—'}
             isConnected={players.find((p) => p.seat === 1)?.isConnected ?? false}
             isTurn={seatOf(round?.currentPlayerId) === 1 && !matchCompleted}
+            isMe={players.find((p) => p.seat === 1)?.id === myPlayerId}
           />
-          <div className="text-center">
-            <p className="font-display text-2xl font-bold text-gold-400" aria-label={`Skor: ${scoreLabel}`}>
+          <div className="px-2 text-center">
+            <p className="font-display text-2xl font-bold text-gold-400 md:text-3xl" aria-label={`Skor: ${scoreLabel}`}>
               {scoreLabel}
             </p>
-            <p className="text-[10px] uppercase tracking-wider text-cream-400">
+            <p className="text-[10px] uppercase tracking-wider text-cream-300">
               {match.bestOf === 1 ? 'Tek el' : `${match.requiredWins} puana`} ·{' '}
-              {round ? `${round.roundNumber}. el` : 'Maç bitti'}
+              {round ? `${round.roundNumber}. el · Tur ${round.turnNumber}` : 'Maç bitti'}
             </p>
           </div>
           <PlayerScore
             name={players.find((p) => p.seat === 2)?.displayName ?? '—'}
             isConnected={players.find((p) => p.seat === 2)?.isConnected ?? false}
             isTurn={seatOf(round?.currentPlayerId) === 2 && !matchCompleted}
+            isMe={players.find((p) => p.seat === 2)?.id === myPlayerId}
             alignRight
           />
         </section>
       )}
+
+      {/* Rakip bağlantı kesintisi bilgi çubuğu */}
+      <AnimatePresence>
+        {opponent && !opponent.isConnected && !matchCompleted && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            role="status"
+            className="flex items-center justify-center gap-2 rounded-xl border border-amber-500/35 bg-amber-950/40 px-4 py-2 text-xs text-amber-200"
+          >
+            <WifiOff size={14} className="shrink-0 text-amber-400" aria-hidden="true" />
+            <span>
+              <strong>{opponent.displayName}</strong> bağlantısı koptu. Odaya yeniden bağlanması bekleniyor…
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Başlangıç zarı sonucu */}
       <AnimatePresence>
@@ -325,7 +405,7 @@ export default function GameView({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             role="alert"
-            className="rounded-xl border-2 border-gold-500/70 bg-bordo-700/60 px-4 py-3 text-center text-sm font-semibold text-cream-50"
+            className="rounded-xl border-2 border-gold-500/70 bg-gradient-to-r from-bordo-700/80 via-bordo-600/70 to-bordo-700/80 px-4 py-3 text-center text-sm font-semibold text-cream-50 shadow-md"
           >
             {pendingDice.length > 0 ? (
               <>
@@ -363,11 +443,31 @@ export default function GameView({
 
       {/* Oyun geçmişi */}
       {history.length > 0 && (
-        <section aria-label="Oyun geçmişi" className="rounded-xl border border-night-600 bg-night-800/60 p-3">
-          <ul className="space-y-0.5 text-xs text-cream-300">
+        <section
+          aria-label="Oyun geçmişi"
+          className="rounded-xl border border-gold-500/15 bg-night-800/75 p-3 shadow-inner"
+        >
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gold-400/90">
+              Son Hamleler
+            </span>
+            <span className="text-[10px] text-cream-400">Canlı Akış</span>
+          </div>
+          <ul className="space-y-1 text-xs text-cream-300">
             {history.slice(0, 5).map((entry, index) => (
-              <li key={index} className={index === 0 ? 'text-cream-100' : 'opacity-70'}>
-                {entry}
+              <li
+                key={index}
+                className={`flex items-center gap-2 rounded-md px-2 py-0.5 ${
+                  index === 0 ? 'bg-night-700/70 font-medium text-cream-50' : 'opacity-75'
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                    index === 0 ? 'bg-gold-400' : 'bg-cream-400/50'
+                  }`}
+                />
+                <span>{entry}</span>
               </li>
             ))}
           </ul>
@@ -423,7 +523,7 @@ export default function GameView({
               animate={{ scale: 1, y: 0 }}
               role="dialog"
               aria-label="Maç sonucu"
-              className="w-full max-w-md rounded-2xl border border-gold-500/30 bg-night-800 p-6 text-center shadow-2xl"
+              className="relative w-full max-w-md overflow-hidden rounded-2xl border border-gold-500/35 bg-night-800 p-6 text-center shadow-2xl"
             >
               <Confetti />
               <Trophy size={48} className="mx-auto mb-3 text-gold-400" aria-hidden="true" />
@@ -431,16 +531,39 @@ export default function GameView({
                 {winnerPlayer.id === myPlayerId ? 'Tebrikler, kazandın!' : `${winnerPlayer.displayName} maçı kazandı`}
               </h2>
               {lastMatchEnded?.isMars && (
-                <p className="mt-1 text-xl font-black tracking-wider text-gold-400">MARS'LA BİTTİ! 😂</p>
+                <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-gold-500/20 px-3 py-1 text-sm font-black tracking-wider text-gold-400">
+                  <Sparkles size={14} aria-hidden="true" />
+                  MARS'LA BİTTİ! (2 Puan)
+                </p>
               )}
-              <p className="mt-2 text-lg text-gold-400">
+              <p className="mt-2 text-lg font-bold text-gold-400">
                 Final skor: {match?.player1Score} - {match?.player2Score}
               </p>
+
+              {/* Maç İstatistik Özeti */}
+              <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl border border-night-600 bg-night-900/80 p-3 text-xs">
+                <div>
+                  <span className="block text-[10px] uppercase text-cream-400">Maç No</span>
+                  <span className="font-mono text-sm font-bold text-cream-100">#{match?.matchNumber ?? 1}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase text-cream-400">Format</span>
+                  <span className="font-semibold text-cream-100">
+                    {match?.bestOf === 1 ? 'Tek El' : `${match?.requiredWins} Puana`}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase text-cream-400">Sonuç</span>
+                  <span className="font-semibold text-gold-400">
+                    {lastMatchEnded?.isMars ? 'Mars (2P)' : 'Normal'}
+                  </span>
+                </div>
+              </div>
 
               <div className="mt-6 space-y-2.5">
                 {rematchRequestedByOpponent ? (
                   <>
-                    <p className="text-sm text-cream-200">Rakibin rövanş istiyor!</p>
+                    <p className="text-sm font-medium text-gold-400">Rakibin rövanş istiyor!</p>
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -501,18 +624,21 @@ function PlayerScore({
   name,
   isConnected,
   isTurn,
+  isMe = false,
   alignRight = false,
 }: {
   name: string;
   isConnected: boolean;
   isTurn: boolean;
+  isMe?: boolean;
   alignRight?: boolean;
 }) {
   return (
-    <div className={`flex flex-col gap-0.5 ${alignRight ? 'items-end text-right' : 'items-start'}`}>
-      <span className={`text-sm font-semibold ${isTurn ? 'text-gold-400' : 'text-cream-100'}`}>
-        {isTurn && '● '}
-        {name}
+    <div className={`flex min-w-0 flex-col gap-0.5 ${alignRight ? 'items-end text-right' : 'items-start'}`}>
+      <span className={`flex items-center gap-1.5 text-sm font-semibold ${isTurn ? 'text-gold-400' : 'text-cream-100'}`}>
+        {isTurn && <span className="anim-turn-dot inline-block h-2 w-2 rounded-full bg-gold-400" aria-hidden="true" />}
+        <span className="truncate">{name}</span>
+        {isMe && <span className="text-[10px] font-normal text-cream-400">(sen)</span>}
       </span>
       <ConnectionDot isConnected={isConnected} />
     </div>

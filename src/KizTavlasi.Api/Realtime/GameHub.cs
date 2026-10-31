@@ -7,7 +7,7 @@ namespace KizTavlasi.Api.Realtime;
 
 public sealed record StartMatchHubRequest(Guid CommandId);
 public sealed record RollDiceHubRequest(Guid CommandId, long ExpectedStateVersion);
-public sealed record PlayMoveHubRequest(int PointNumber, long ExpectedStateVersion);
+public sealed record PlayMoveHubRequest(int PointNumber, long ExpectedStateVersion, Guid? CommandId = null);
 public sealed record ReactionHubRequest(string Emoji);
 
 /// <summary>
@@ -43,7 +43,11 @@ public sealed class GameHub : Hub
     {
         var session = await GetValidatedSessionAsync();
         await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(session.RoomCode));
-        await _roomService.SetConnectionStateAsync(session, isConnected: true, Context.ConnectionAborted);
+        await _roomService.SetConnectionStateAsync(
+            session,
+            isConnected: true,
+            Context.ConnectionAborted,
+            connectionId: Context.ConnectionId);
         await base.OnConnectedAsync();
     }
 
@@ -52,7 +56,10 @@ public sealed class GameHub : Hub
         try
         {
             var session = PlayerSessionResolver.Resolve(Context.User!);
-            await _roomService.SetConnectionStateAsync(session, isConnected: false);
+            await _roomService.SetConnectionStateAsync(
+                session,
+                isConnected: false,
+                connectionId: Context.ConnectionId);
         }
         catch (GameDomainException)
         {
@@ -72,7 +79,11 @@ public sealed class GameHub : Hub
     {
         var session = await GetValidatedSessionAsync();
         await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(session.RoomCode));
-        await _roomService.SetConnectionStateAsync(session, isConnected: true, Context.ConnectionAborted);
+        await _roomService.SetConnectionStateAsync(
+            session,
+            isConnected: true,
+            Context.ConnectionAborted,
+            connectionId: Context.ConnectionId);
         var snapshot = await _roomService.GetRoomStateAsync(session, Context.ConnectionAborted);
         await Clients.Caller.SendAsync(GameHubEvents.RoomSnapshotReceived, snapshot, Context.ConnectionAborted);
     }
@@ -80,8 +91,6 @@ public sealed class GameHub : Hub
     public async Task StartMatch(StartMatchHubRequest request)
     {
         var session = await GetValidatedSessionAsync();
-        await Clients.Group(GroupName(session.RoomCode))
-            .SendAsync(GameHubEvents.StartingRollStarted, new { roomCode = session.RoomCode, serverTimeUtc = _timeProvider.GetUtcNow().UtcDateTime });
         await _gameService.StartMatchAsync(session, request.CommandId, Context.ConnectionAborted);
     }
 
@@ -93,15 +102,16 @@ public sealed class GameHub : Hub
             throw new GameDomainException(DomainErrorCodes.InvalidCommand, "CommandId zorunludur.");
         }
 
-        await Clients.Group(GroupName(session.RoomCode))
-            .SendAsync(GameHubEvents.DiceRollStarted, new
-            {
-                roomCode = session.RoomCode,
-                playerId = session.PlayerId,
-                serverTimeUtc = _timeProvider.GetUtcNow().UtcDateTime
-            });
+        var result = await _gameService.RollDiceAsync(
+            session,
+            request.CommandId,
+            request.ExpectedStateVersion,
+            Context.ConnectionAborted);
 
-        await _gameService.RollDiceAsync(session, request.CommandId, request.ExpectedStateVersion, Context.ConnectionAborted);
+        if (result.WasAlreadyProcessed)
+        {
+            await Clients.Caller.SendAsync(GameHubEvents.RoomSnapshotReceived, result.Snapshot, Context.ConnectionAborted);
+        }
     }
 
     public async Task PlayMove(PlayMoveHubRequest request)
@@ -112,7 +122,12 @@ public sealed class GameHub : Hub
             throw new GameDomainException(DomainErrorCodes.InvalidCommand, "Geçersiz hane numarası.");
         }
 
-        await _gameService.PlayMoveAsync(session, request.PointNumber, request.ExpectedStateVersion, Context.ConnectionAborted);
+        await _gameService.PlayMoveAsync(
+            session,
+            request.PointNumber,
+            request.ExpectedStateVersion,
+            Context.ConnectionAborted,
+            request.CommandId);
     }
 
     public async Task RequestRematch()

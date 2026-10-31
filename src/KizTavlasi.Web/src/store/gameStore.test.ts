@@ -8,7 +8,10 @@ function snapshotWithVersion(version: number): RoomSnapshotDto {
     status: 'Playing',
     bestOf: 1,
     hostPlayerId: 'p1',
-    players: [],
+    players: [
+      { id: 'p1', displayName: 'Ayşe', seat: 1, isConnected: true, isHost: true },
+      { id: 'p2', displayName: 'Fatma', seat: 2, isConnected: true, isHost: false },
+    ],
     match: null,
     rematchRequestedByPlayerId: null,
     stateVersion: version,
@@ -45,6 +48,39 @@ describe('gameStore', () => {
     useGameStore.getState().applySnapshot(duplicate);
 
     expect(useGameStore.getState().snapshot?.roomCode).toBe('ABCDEF');
+  });
+
+  it('setPlayerConnection stateVersion artmasa bile oyuncunun bağlantı durumunu günceller', () => {
+    const store = useGameStore.getState();
+    store.applySnapshot(snapshotWithVersion(7));
+
+    store.setPlayerConnection('p2', false, 7);
+
+    const p2 = useGameStore.getState().snapshot?.players.find((p) => p.id === 'p2');
+    expect(p2?.isConnected).toBe(false);
+    expect(useGameStore.getState().stateVersion).toBe(7);
+  });
+
+  it('setPlayerConnection eski stateVersion içeren bağlantı olayını reddeder', () => {
+    const store = useGameStore.getState();
+    store.applySnapshot(snapshotWithVersion(10));
+
+    store.setPlayerConnection('p2', false, 8);
+
+    const p2 = useGameStore.getState().snapshot?.players.find((p) => p.id === 'p2');
+    expect(p2?.isConnected).toBe(true);
+  });
+
+  it('applyAuthoritativeSnapshot rejoin sırasında aynı stateVersion ile gelse bile kabul edilir', () => {
+    const store = useGameStore.getState();
+    store.applySnapshot(snapshotWithVersion(5));
+
+    const rejoined = snapshotWithVersion(5);
+    rejoined.players[1].isConnected = false;
+    store.applyAuthoritativeSnapshot(rejoined);
+
+    const p2 = useGameStore.getState().snapshot?.players.find((p) => p.id === 'p2');
+    expect(p2?.isConnected).toBe(false);
   });
 
   it('geçmiş en fazla 8 kayıt tutar', () => {

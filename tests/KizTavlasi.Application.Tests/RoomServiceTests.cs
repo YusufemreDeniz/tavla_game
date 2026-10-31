@@ -45,6 +45,7 @@ public class RoomServiceTests : IDisposable
         joined.RoomState.Players.Should().HaveCount(2);
         joined.RoomState.Status.Should().Be("InLobby");
         _harness.Notifier.Events.Should().Contain("PlayerJoined");
+        _harness.Notifier.AnyNotificationInsideTransaction.Should().BeFalse("bildirimler transaction commit sonrasinda calismali");
     }
 
     [Fact]
@@ -122,6 +123,117 @@ public class RoomServiceTests : IDisposable
         var result = await _harness.RoomService.CreateRoomAsync(new CreateRoomRequest("  Ayşe \t  Hanım \n ", 1));
 
         result.Player.DisplayName.Should().Be("Ayşe Hanım");
+    }
+
+    [Fact]
+    public async Task Coklu_sekme_baglantisinda_bir_sekme_kapaninca_oyuncu_cevrimdisi_olmaz()
+    {
+        var created = await _harness.RoomService.CreateRoomAsync(new CreateRoomRequest("Ayşe", 1));
+        var session = _harness.SessionFor(created.PlayerToken);
+
+        await _harness.RoomService.SetConnectionStateAsync(session, isConnected: true, connectionId: "conn-tab-1");
+        await _harness.RoomService.SetConnectionStateAsync(session, isConnected: true, connectionId: "conn-tab-2");
+
+        // İlk sekme kapandığında ikinci sekme hâlâ açık olduğu için oyuncu çevrim içi kalmalı.
+        await _harness.RoomService.SetConnectionStateAsync(session, isConnected: false, connectionId: "conn-tab-1");
+        var stateAfterFirstClose = await _harness.RoomService.GetRoomStateAsync(session);
+        stateAfterFirstClose.Players.Single().IsConnected.Should().BeTrue();
+
+        // Son sekme de kapandığında oyuncu çevrim dışı olmalı.
+        await _harness.RoomService.SetConnectionStateAsync(session, isConnected: false, connectionId: "conn-tab-2");
+        var stateAfterSecondClose = await _harness.RoomService.GetRoomStateAsync(session);
+        stateAfterSecondClose.Players.Single().IsConnected.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Aktif_macta_oyuncu_odadan_ayrilirsa_kalan_oyuncu_hukmen_kazanir()
+    {
+        var created = await _harness.RoomService.CreateRoomAsync(new CreateRoomRequest("Ayşe", 3));
+        var joined = await _harness.RoomService.JoinRoomAsync(created.RoomCode, new JoinRoomRequest("Fatma"));
+        var hostSession = _harness.SessionFor(created.PlayerToken);
+        var guestSession = _harness.SessionFor(joined.PlayerToken);
+
+        _harness.Dice.Enqueue(6, 2);
+        await _harness.GameService.StartMatchAsync(hostSession, Guid.NewGuid());
+
+        await _harness.RoomService.LeaveRoomAsync(guestSession);
+
+        var state = await _harness.RoomService.GetRoomStateAsync(hostSession);
+        state.Status.Should().Be("Completed");
+        state.Match!.Status.Should().Be("Completed");
+        state.Match.WinnerPlayerId.Should().Be(hostSession.PlayerId);
+        _harness.Notifier.Events.Should().Contain("PlayerLeft").And.Contain("MatchEnded");
+    }
+
+    [Fact]
+    public async Task Aktif_macta_iki_oyuncu_da_grace_suresini_asarsa_oda_abandoned_olur()
+    {
+        var created = await _harness.RoomService.CreateRoomAsync(new CreateRoomRequest("Ayşe", 1));
+        var joined = await _harness.RoomService.JoinRoomAsync(created.RoomCode, new JoinRoomRequest("Fatma"));
+        var hostSession = _harness.SessionFor(created.PlayerToken);
+        var guestSession = _harness.SessionFor(joined.PlayerToken);
+
+        await _harness.RoomService.SetConnectionStateAsync(hostSession, isConnected: false);
+        await _harness.RoomService.SetConnectionStateAsync(guestSession, isConnected: false);
+
+        _harness.Dice.Enqueue(6, 2);
+        await _harness.GameService.StartMatchAsync(hostSession, Guid.NewGuid());
+
+        // İki oyuncu da 6 dakika boyunca bağlı değil (grace = 5 dk).
+        _harness.Time.Advance(TimeSpan.FromMinutes(6));
+        await _harness.CleanupService.CleanupAsync();
+
+        var act = () => _harness.RoomService.GetRoomStateAsync(hostSession);
+        (await act.Should().ThrowAsync<GameDomainException>())
+            .Which.Code.Should().Be(DomainErrorCodes.RoomExpired);
+    }
+
+    [Fact]
+    public async Task Aktif_macta_tek_oyuncu_grace_suresini_asarsa_bagli_oyuncu_hukmen_kazanir()
+    {
+        var created = await _harness.RoomService.CreateRoomAsync(new CreateRoomRequest("Ayşe", 3));
+        var joined = await _harness.RoomService.JoinRoomAsync(created.RoomCode, new JoinRoomRequest("Fatma"));
+        var hostSession = _harness.SessionFor(created.PlayerToken);
+        var guestSession = _harness.SessionFor(joined.PlayerToken);
+
+        await _harness.RoomService.SetConnectionStateAsync(hostSession, isConnected: true, connectionId: "host-conn");
+        await _harness.RoomService.SetConnectionStateAsync(guestSession, isConnected: true, connectionId: "guest-conn");
+
+        _harness.Dice.Enqueue(6, 2);
+        await _harness.GameService.StartMatchAsync(hostSession, Guid.NewGuid());
+
+        // Guest kopar ve 6 dakika boyunca dönmez; Host bağlıdır.
+        await _harness.RoomService.SetConnectionStateAsync(guestSession, isConnected: false, connectionId: "guest-conn");
+        _harness.Time.Advance(TimeSpan.FromMinutes(6));
+
+        await _harness.CleanupService.CleanupAsync();
+
+        var state = await _harness.RoomService.GetRoomStateAsync(hostSession);
+        state.Status.Should().Be("Completed");
+        state.Match!.Status.Should().Be("Completed");
+        state.Match.WinnerPlayerId.Should().Be(hostSession.PlayerId);
+    }
+
+    [Fact]
+    public async Task Bagli_oyunculari_olan_aktif_mac_temizlikte_kapatilmaz()
+    {
+        var created = await _harness.RoomService.CreateRoomAsync(new CreateRoomRequest("Ayşe", 1));
+        var joined = await _harness.RoomService.JoinRoomAsync(created.RoomCode, new JoinRoomRequest("Fatma"));
+        var hostSession = _harness.SessionFor(created.PlayerToken);
+        var guestSession = _harness.SessionFor(joined.PlayerToken);
+
+        await _harness.RoomService.SetConnectionStateAsync(hostSession, isConnected: true, connectionId: "host-active");
+        await _harness.RoomService.SetConnectionStateAsync(guestSession, isConnected: true, connectionId: "guest-active");
+
+        _harness.Dice.Enqueue(6, 2);
+        await _harness.GameService.StartMatchAsync(hostSession, Guid.NewGuid());
+
+        _harness.Time.Advance(TimeSpan.FromMinutes(15));
+        await _harness.CleanupService.CleanupAsync();
+
+        var state = await _harness.RoomService.GetRoomStateAsync(hostSession);
+        state.Status.Should().Be("Playing");
+        state.Match!.Status.Should().Be("InProgress");
     }
 }
 

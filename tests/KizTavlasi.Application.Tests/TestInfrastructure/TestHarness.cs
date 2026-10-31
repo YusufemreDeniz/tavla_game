@@ -2,8 +2,10 @@ using KizTavlasi.Application;
 using KizTavlasi.Application.Abstractions;
 using KizTavlasi.Application.Dtos;
 using KizTavlasi.Domain;
+using KizTavlasi.Infrastructure;
 using KizTavlasi.Infrastructure.Persistence;
 using KizTavlasi.Infrastructure.Security;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -16,13 +18,17 @@ public sealed class TestHarness : IDisposable
     public GameDbContext Db { get; }
     public RoomService RoomService { get; }
     public GameService GameService { get; }
+    public RoomCleanupService CleanupService { get; }
     public QueueDiceService Dice { get; } = new();
-    public RecordingNotifier Notifier { get; } = new();
+    public RecordingNotifier Notifier { get; }
     public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 7, 6, 12, 0, 0, TimeSpan.Zero));
+
+    private readonly ServiceProvider _cleanupScopeProvider;
 
     public TestHarness(SqlTestDatabase database)
     {
         Db = database.CreateContext();
+        Notifier = new RecordingNotifier(() => Db.Database.CurrentTransaction is not null);
 
         var gameOptions = Options.Create(new GameOptions());
         var jwtOptions = Options.Create(new JwtOptions
@@ -52,6 +58,17 @@ public sealed class TestHarness : IDisposable
             new GameEngine(GameRulesOptions.Default),
             Time,
             NullLogger<GameService>.Instance);
+
+        var services = new ServiceCollection();
+        services.AddScoped(_ => database.CreateContext());
+        services.AddSingleton<IGameNotifier>(Notifier);
+        _cleanupScopeProvider = services.BuildServiceProvider();
+
+        CleanupService = new RoomCleanupService(
+            _cleanupScopeProvider.GetRequiredService<IServiceScopeFactory>(),
+            Time,
+            gameOptions,
+            NullLogger<RoomCleanupService>.Instance);
     }
 
     public PlayerSession SessionFor(string token)
@@ -69,7 +86,11 @@ public sealed class TestHarness : IDisposable
             Claim("jti"));
     }
 
-    public void Dispose() => Db.Dispose();
+    public void Dispose()
+    {
+        _cleanupScopeProvider.Dispose();
+        Db.Dispose();
+    }
 }
 
 /// <summary>Testlerde sıradaki zar değerlerini kuyruğa yazarak deterministik oyun sağlar.</summary>
@@ -93,24 +114,48 @@ public sealed class QueueDiceService : IDiceService
 /// <summary>Yayınlanan olayları kaydeder; SignalR gerektirmez.</summary>
 public sealed class RecordingNotifier : IGameNotifier
 {
+    private readonly Func<bool>? _isTransactionActive;
+
+    public RecordingNotifier(Func<bool>? isTransactionActive = null)
+    {
+        _isTransactionActive = isTransactionActive;
+    }
+
     public List<string> Events { get; } = [];
     public RoomSnapshotDto? LastSnapshot { get; private set; }
     public RoundEndedDto? LastRoundEnded { get; private set; }
     public MatchEndedDto? LastMatchEnded { get; private set; }
+    public bool AnyNotificationInsideTransaction { get; private set; }
+    public bool ThrowOnNotify { get; set; }
 
-    private Task Record(string name, RoomSnapshotDto snapshot)
+    private Task Record(string name, RoomSnapshotDto? snapshot)
     {
+        if (_isTransactionActive?.Invoke() == true)
+        {
+            AnyNotificationInsideTransaction = true;
+        }
+
+        if (ThrowOnNotify)
+        {
+            throw new InvalidOperationException($"Simüle edilen SignalR yayın hatası: {name}");
+        }
+
         Events.Add(name);
-        LastSnapshot = snapshot;
+        if (snapshot is not null)
+        {
+            LastSnapshot = snapshot;
+        }
         return Task.CompletedTask;
     }
 
     public Task PlayerJoinedAsync(string roomCode, PlayerDto player, RoomSnapshotDto snapshot, CancellationToken ct = default) => Record("PlayerJoined", snapshot);
     public Task PlayerLeftAsync(string roomCode, Guid playerId, RoomSnapshotDto snapshot, CancellationToken ct = default) => Record("PlayerLeft", snapshot);
     public Task PlayerConnectionChangedAsync(string roomCode, Guid playerId, bool isConnected, RoomSnapshotDto snapshot, CancellationToken ct = default) => Record("PlayerConnectionChanged", snapshot);
+    public Task StartingRollStartedAsync(string roomCode, DateTime serverTimeUtc, CancellationToken ct = default) => Record("StartingRollStarted", null);
     public Task MatchStartedAsync(string roomCode, RoomSnapshotDto snapshot, CancellationToken ct = default) => Record("MatchStarted", snapshot);
     public Task StartingRollResolvedAsync(string roomCode, StartingRollDto startingRoll, RoomSnapshotDto snapshot, CancellationToken ct = default) => Record("StartingRollResolved", snapshot);
     public Task TurnStartedAsync(string roomCode, Guid currentPlayerId, int turnNumber, RoomSnapshotDto snapshot, CancellationToken ct = default) => Record("TurnStarted", snapshot);
+    public Task DiceRollStartedAsync(string roomCode, Guid playerId, DateTime serverTimeUtc, CancellationToken ct = default) => Record("DiceRollStarted", null);
     public Task DiceRollResolvedAsync(string roomCode, DiceRollResultDto result, RoomSnapshotDto snapshot, CancellationToken ct = default) => Record("DiceRollResolved", snapshot);
     public Task MovePlayedAsync(string roomCode, MovePlayedDto movePlayed, RoomSnapshotDto snapshot, CancellationToken ct = default) => Record("MovePlayed", snapshot);
     public Task RoundEndedAsync(string roomCode, RoundEndedDto roundEnded, RoomSnapshotDto snapshot, CancellationToken ct = default)

@@ -24,22 +24,24 @@ const BOARD_GRAIN =
   'repeating-linear-gradient(88deg, rgba(90,55,25,0.12) 0px, rgba(90,55,25,0) 4px, rgba(255,245,220,0.10) 7px, rgba(90,55,25,0) 11px, rgba(90,55,25,0.10) 18px)';
 const SPINE_WOOD = 'linear-gradient(90deg, #4a2c15, #6b4426 45%, #7a4f2c 55%, #452a14)';
 
-/** Yarım kanat yüksekliği: ekranı dikeyde doldurur, mobilde okunur kalır. */
-const HALF_HEIGHT = 'h-[clamp(10rem,27vh,22rem)]';
+/** Yarım kanat yüksekliği: ekranı dikeyde doldurur, 360px mobilde bile taşma yapmaz. */
+const HALF_HEIGHT = 'h-[clamp(10.5rem,27vh,21.5rem)]';
 
 const Checker = memo(function Checker({ isMine, isDown }: { isMine: boolean; isDown: boolean }) {
   return (
     <div
-      className="anim-piece-pop relative aspect-square w-[78%] shrink-0 rounded-full"
+      className="anim-piece-pop relative aspect-square w-[76%] max-w-11 shrink-0 rounded-full transition-transform duration-150"
       style={{
         background: isMine
-          ? 'radial-gradient(circle at 32% 28%, #b25a6c 0%, #8e2f3c 40%, #5c1c27 78%, #3f121a 100%)'
-          : 'radial-gradient(circle at 32% 28%, #fffdf7 0%, #f2e8d2 40%, #d8c5a0 78%, #b9a179 100%)',
+          ? 'radial-gradient(circle at 32% 28%, #c0687a 0%, #983342 38%, #631d29 76%, #3f121a 100%)'
+          : 'radial-gradient(circle at 32% 28%, #fffefb 0%, #f5ebd6 38%, #dcc7a1 76%, #b59a70 100%)',
         boxShadow: [
-          '0 3px 5px rgba(0,0,0,0.5)',
-          'inset 0 2px 3px rgba(255,255,255,0.5)',
-          'inset 0 -3px 5px rgba(0,0,0,0.35)',
-          isDown ? '0 0 0 2px rgba(212,175,55,0.95), 0 0 10px rgba(212,175,55,0.5)' : '0 0 0 1px rgba(0,0,0,0.25)',
+          '0 3px 6px rgba(0,0,0,0.55)',
+          'inset 0 2px 3px rgba(255,255,255,0.55)',
+          'inset 0 -3px 5px rgba(0,0,0,0.4)',
+          isDown
+            ? '0 0 0 2px rgba(212,175,55,0.95), 0 0 10px rgba(212,175,55,0.5)'
+            : '0 0 0 1px rgba(0,0,0,0.28)',
         ].join(', '),
       }}
       aria-hidden="true"
@@ -47,16 +49,16 @@ const Checker = memo(function Checker({ isMine, isDown }: { isMine: boolean; isD
       <span
         className="absolute inset-[14%] rounded-full"
         style={{
-          border: isMine ? '1px solid rgba(255,220,225,0.25)' : '1px solid rgba(120,85,50,0.30)',
+          border: isMine ? '1px solid rgba(255,220,225,0.28)' : '1px solid rgba(120,85,50,0.32)',
         }}
       />
       <span
         className="absolute inset-[30%] rounded-full"
         style={{
-          border: isMine ? '1px solid rgba(255,220,225,0.20)' : '1px solid rgba(120,85,50,0.25)',
+          border: isMine ? '1px solid rgba(255,220,225,0.22)' : '1px solid rgba(120,85,50,0.26)',
           background: isMine
-            ? 'radial-gradient(circle at 40% 35%, rgba(255,255,255,0.18), transparent 65%)'
-            : 'radial-gradient(circle at 40% 35%, rgba(255,255,255,0.45), transparent 65%)',
+            ? 'radial-gradient(circle at 40% 35%, rgba(255,255,255,0.20), transparent 65%)'
+            : 'radial-gradient(circle at 40% 35%, rgba(255,255,255,0.48), transparent 65%)',
         }}
       />
     </div>
@@ -92,6 +94,8 @@ const PointColumn = memo(function PointColumn({
     ? `linear-gradient(${direction}, #8a4a22 0%, #6d3a1a 60%, #542c12 100%)`
     : `linear-gradient(${direction}, #efdcae 0%, #e2c893 60%, #cbab72 100%)`;
 
+  const totalPieces = backCount + frontCount;
+
   const content = (
     <>
       {/* Üçgen hane + kontur */}
@@ -101,7 +105,7 @@ const PointColumn = memo(function PointColumn({
         style={{
           top: isTop ? 0 : 'auto',
           bottom: isTop ? 'auto' : 0,
-          height: '90%',
+          height: '88%',
           clipPath: isTop ? 'polygon(0 0, 100% 0, 50% 100%)' : 'polygon(50% 0, 0 100%, 100% 100%)',
           background: fill,
         }}
@@ -112,7 +116,7 @@ const PointColumn = memo(function PointColumn({
         style={{
           top: isTop ? 0 : 'auto',
           bottom: isTop ? 'auto' : 0,
-          height: '90%',
+          height: '88%',
           clipPath: isTop
             ? 'polygon(0 0, 100% 0, 50% 100%, 47% 94%, 94% 3%, 6% 3%, 53% 94%)'
             : 'polygon(50% 0, 0 100%, 100% 100%, 94% 97%, 50% 8%, 6% 97%)',
@@ -127,38 +131,54 @@ const PointColumn = memo(function PointColumn({
           aria-hidden="true"
           className="anim-point-flash absolute inset-0 z-20 rounded-md"
           style={{
-            background: 'radial-gradient(circle at 50% 50%, rgba(212,175,55,0.55), rgba(212,175,55,0.08) 70%)',
-            boxShadow: 'inset 0 0 0 3px rgba(212,175,55,0.9)',
+            background:
+              'radial-gradient(circle at 50% 50%, rgba(212,175,55,0.58), rgba(212,175,55,0.08) 70%)',
+            boxShadow: 'inset 0 0 0 3px rgba(212,175,55,0.92)',
           }}
         />
       )}
 
       {/* Pullar: inmemişler kenardan; inmişler (altın halkalı) ortaya doğru */}
       <div
-        className={`absolute inset-0 flex items-center px-[8%] py-[2%] ${
+        className={`absolute inset-0 flex items-center px-[7%] py-[4%] ${
           isTop ? 'flex-col' : 'flex-col-reverse'
         }`}
-        style={{ gap: '1%' }}
+        style={{ gap: '1.5%' }}
       >
         {Array.from({ length: backCount }).map((_, i) => (
           <Checker key={`up-${i}`} isMine={isMine} isDown={false} />
         ))}
-        {frontCount > 0 && backCount > 0 && <div className="h-[6%]" aria-hidden="true" />}
+        {frontCount > 0 && backCount > 0 && <div className="h-[5%]" aria-hidden="true" />}
         {Array.from({ length: frontCount }).map((_, i) => (
           <Checker key={`down-${i}`} isMine={isMine} isDown />
         ))}
       </div>
 
-      {/* Hane numarası (kakma pirinç görünümü) */}
-      <span
-        className={`absolute inset-x-0 z-10 text-center font-display text-[11px] font-bold md:text-sm ${
-          isTop ? 'bottom-0' : 'top-0'
+      {/* Hane numarası ve pul adedi rozeti (kakma pirinç görünümü) */}
+      <div
+        className={`absolute inset-x-0 z-10 flex items-center justify-center gap-1 ${
+          isTop ? 'bottom-0.5' : 'top-0.5'
         }`}
-        style={{ color: '#8a6a35', textShadow: '0 1px 0 rgba(255,240,200,0.4)' }}
         aria-hidden="true"
       >
-        {pointNumber}
-      </span>
+        <span
+          className="font-display text-[11px] font-bold leading-none md:text-xs"
+          style={{ color: '#6b4a1e', textShadow: '0 1px 0 rgba(255,245,215,0.55)' }}
+        >
+          {pointNumber}
+        </span>
+        {totalPieces > 0 && (
+          <span
+            className="rounded-full px-1 py-0.5 font-mono text-[9px] font-semibold leading-none md:text-[10px]"
+            style={{
+              backgroundColor: clickable ? 'rgba(142,47,60,0.9)' : 'rgba(43,24,8,0.68)',
+              color: clickable ? '#fffdf7' : '#f0e6d2',
+            }}
+          >
+            {totalPieces}
+          </span>
+        )}
+      </div>
     </>
   );
 
@@ -168,12 +188,15 @@ const PointColumn = memo(function PointColumn({
         type="button"
         onClick={() => onPick?.(pointNumber)}
         aria-label={`${pointNumber}. haneyi oyna`}
-        className="relative h-full min-w-0 cursor-pointer"
+        className="group relative h-full min-h-11 min-w-11 cursor-pointer touch-manipulation rounded-md transition-transform active:scale-[0.98]"
       >
         <span
           aria-hidden="true"
           className="anim-pulse-gold absolute inset-0 z-20 rounded-md"
-          style={{ boxShadow: 'inset 0 0 0 3px #d4af37, 0 0 14px rgba(212,175,55,0.7)' }}
+          style={{
+            boxShadow: 'inset 0 0 0 3px #d4af37, 0 0 16px rgba(212,175,55,0.75)',
+            background: 'linear-gradient(180deg, rgba(212,175,55,0.14), rgba(212,175,55,0.04))',
+          }}
         />
         {content}
       </button>
@@ -195,16 +218,22 @@ function Spine() {
   return (
     <div
       aria-hidden="true"
-      className="relative h-full w-3 md:w-4"
+      className="relative h-full w-2.5 shrink-0 md:w-4"
       style={{ background: SPINE_WOOD, boxShadow: 'inset 0 0 4px rgba(0,0,0,0.6)' }}
     >
       <span
         className="absolute left-1/2 top-[12%] h-6 w-1.5 -translate-x-1/2 rounded-sm md:w-2"
-        style={{ background: 'linear-gradient(180deg, #e8d49a, #a68334 50%, #d9c078)', boxShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
+        style={{
+          background: 'linear-gradient(180deg, #e8d49a, #a68334 50%, #d9c078)',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.6)',
+        }}
       />
       <span
         className="absolute left-1/2 bottom-[12%] h-6 w-1.5 -translate-x-1/2 rounded-sm md:w-2"
-        style={{ background: 'linear-gradient(180deg, #e8d49a, #a68334 50%, #d9c078)', boxShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
+        style={{
+          background: 'linear-gradient(180deg, #e8d49a, #a68334 50%, #d9c078)',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.6)',
+        }}
       />
     </div>
   );
@@ -223,25 +252,33 @@ const CollectedRail = memo(function CollectedRail({
     <div
       role="group"
       aria-label={`${label}: toplanan ${count} pul`}
-      className="flex h-full w-6 flex-col justify-end gap-[3px] rounded-sm p-[3px] md:w-8"
+      className="flex h-full w-7 flex-col justify-between rounded-sm p-[3px] md:w-9"
       style={{
-        background: 'linear-gradient(180deg, #3a2110, #2b1808)',
-        boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.8), inset 0 0 0 1px rgba(255,220,160,0.08)',
+        background: 'linear-gradient(180deg, #3a2110, #241305)',
+        boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.85), inset 0 0 0 1px rgba(255,220,160,0.1)',
       }}
     >
-      {Array.from({ length: count }).map((_, i) => (
-        <span
-          key={i}
-          className="anim-piece-pop block w-full rounded-[2px]"
-          style={{
-            height: 'max(4px, 5.5%)',
-            background: isMine
-              ? 'linear-gradient(180deg, #a8485a 0%, #5c1d29 100%)'
-              : 'linear-gradient(180deg, #fdfaf2 0%, #cbb790 100%)',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.25)',
-          }}
-        />
-      ))}
+      <span
+        aria-hidden="true"
+        className="text-center font-mono text-[9px] font-bold leading-tight text-gold-400 md:text-[10px]"
+      >
+        {count}/15
+      </span>
+      <div className="flex flex-1 flex-col justify-end gap-[2px] pt-1">
+        {Array.from({ length: count }).map((_, i) => (
+          <span
+            key={i}
+            className="anim-piece-pop block w-full rounded-[2px]"
+            style={{
+              height: 'max(3px, 5%)',
+              background: isMine
+                ? 'linear-gradient(180deg, #b85264 0%, #5c1d29 100%)'
+                : 'linear-gradient(180deg, #fdfaf2 0%, #cbb790 100%)',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.28)',
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 });
@@ -270,6 +307,13 @@ const BoardHalf = memo(function BoardHalf({
   const left = board.points.slice(0, 3);
   const right = board.points.slice(3, 6);
 
+  // Kalan indirme sayısı: başlangıçta toplam 9 indirme yapılır.
+  const remainingBringDowns = board.points.reduce(
+    (sum, p) => sum + Math.max(0, p.backCount - 1),
+    0,
+  );
+  const completedBringDowns = 9 - remainingBringDowns;
+
   const renderGroup = (points: typeof left, offset: number) => (
     <div className="grid h-full flex-1 grid-cols-3">
       {points.map((point, index) => (
@@ -293,23 +337,53 @@ const BoardHalf = memo(function BoardHalf({
     <div
       role="region"
       aria-label={`${name} tahtası${board.isCollecting ? ' (toplama aşamasında)' : ' (indirme aşamasında)'}`}
-      className={`relative flex gap-0 ${HALF_HEIGHT}`}
+      className="space-y-1"
     >
-      <div
-        className="flex flex-1 rounded-md"
-        style={{
-          background: `${BOARD_GRAIN}, ${BOARD_WOOD}`,
-          boxShadow: isTurn
-            ? 'inset 0 0 0 2px rgba(212,175,55,0.55), inset 0 3px 12px rgba(60,30,5,0.35)'
-            : 'inset 0 3px 12px rgba(60,30,5,0.35)',
-        }}
-      >
-        {renderGroup(left, 0)}
-        <Spine />
-        {renderGroup(right, 1)}
+      {/* Oyuncu aşama ve ilerleme şeridi */}
+      <div className="flex items-center justify-between px-1 text-[11px] text-cream-200 md:text-xs">
+        <span className="flex items-center gap-1.5 font-semibold">
+          <span
+            aria-hidden="true"
+            className="inline-block h-2.5 w-2.5 rounded-full border border-white/25"
+            style={{ backgroundColor: isMine ? '#8e2f3c' : '#f2e8d2' }}
+          />
+          <span className="truncate">{name}</span>
+          {isTurn && (
+            <span className="rounded-full bg-gold-500/20 px-1.5 py-0.5 text-[10px] font-bold text-gold-400">
+              Sırada
+            </span>
+          )}
+        </span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+            board.isCollecting
+              ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
+              : 'bg-walnut-800/90 text-cream-200 border border-gold-500/20'
+          }`}
+        >
+          {board.isCollecting
+            ? `Toplama · ${board.collectedCount}/15`
+            : `İndirme · ${completedBringDowns}/9`}
+        </span>
       </div>
-      <div className="ml-1 md:ml-1.5">
-        <CollectedRail count={board.collectedCount} isMine={isMine} label={name} />
+
+      <div className={`relative flex gap-0 ${HALF_HEIGHT}`}>
+        <div
+          className="flex flex-1 rounded-md"
+          style={{
+            background: `${BOARD_GRAIN}, ${BOARD_WOOD}`,
+            boxShadow: isTurn
+              ? 'inset 0 0 0 2px rgba(212,175,55,0.6), inset 0 3px 12px rgba(60,30,5,0.38)'
+              : 'inset 0 3px 12px rgba(60,30,5,0.38)',
+          }}
+        >
+          {renderGroup(left, 0)}
+          <Spine />
+          {renderGroup(right, 1)}
+        </div>
+        <div className="ml-1 md:ml-1.5">
+          <CollectedRail count={board.collectedCount} isMine={isMine} label={name} />
+        </div>
       </div>
     </div>
   );
@@ -343,22 +417,22 @@ export default function BackgammonBoard({
   return (
     <section
       aria-label="Tavla tahtası"
-      className="relative w-full rounded-2xl p-2.5 md:p-4"
+      className="relative w-full rounded-2xl p-2 md:p-4"
       style={{
         background: `${WOOD_GRAIN_OVERLAY}, ${WOOD_FRAME}`,
         boxShadow: [
-          '0 16px 40px rgba(0,0,0,0.6)',
-          '0 2px 6px rgba(0,0,0,0.4)',
-          'inset 0 1px 2px rgba(255,235,200,0.25)',
-          'inset 0 -3px 6px rgba(0,0,0,0.5)',
+          '0 18px 44px rgba(0,0,0,0.65)',
+          '0 2px 6px rgba(0,0,0,0.45)',
+          'inset 0 1px 2px rgba(255,235,200,0.28)',
+          'inset 0 -3px 6px rgba(0,0,0,0.55)',
         ].join(', '),
       }}
     >
       <div
-        className="rounded-xl p-1.5 md:p-2"
+        className="space-y-1.5 rounded-xl p-1.5 md:space-y-2 md:p-2.5"
         style={{
           background: 'linear-gradient(180deg, #2e1a0a, #241305)',
-          boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.8), inset 0 0 0 1px rgba(212,175,55,0.15)',
+          boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.85), inset 0 0 0 1px rgba(212,175,55,0.18)',
         }}
       >
         <BoardHalf
@@ -372,10 +446,10 @@ export default function BackgammonBoard({
         />
 
         <div
-          className="my-1 flex min-h-16 items-center justify-center rounded-sm px-2.5 py-2 md:min-h-20 md:px-4"
+          className="my-1 flex min-h-16 items-center justify-center rounded-md px-2.5 py-2 md:min-h-20 md:px-4"
           style={{
             background: `${WOOD_GRAIN_OVERLAY}, linear-gradient(180deg, #55341b, #40260f 60%, #4a2c15)`,
-            boxShadow: 'inset 0 3px 10px rgba(0,0,0,0.65), 0 1px 1px rgba(255,235,200,0.12)',
+            boxShadow: 'inset 0 3px 10px rgba(0,0,0,0.68), 0 1px 1px rgba(255,235,200,0.14)',
           }}
         >
           {centerContent}

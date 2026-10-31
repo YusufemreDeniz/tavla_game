@@ -55,6 +55,21 @@ public class DiceResolutionTests
     }
 
     [Fact]
+    public void Son_indirme_kaldiginda_normal_zar_atisi_asama_gecisiyle_ikinci_zari_toplamada_oynatir()
+    {
+        var engine = new GameEngine();
+        // Yalnızca 6. hanede 1 indirme hakkı kaldı (diğer haneler 1'e düştü).
+        var board = BoardWith((6, 2, 1), (5, 1, 2), (4, 1, 2), (1, 1, 1), (2, 1, 1), (3, 1, 1));
+
+        // 3 ve 6 atıldı: 6 son indirmeyi tamamlar, 3 ise toplamaya geçerek oynanabilir olur!
+        var outcome = engine.ResolveRoll(board, DiceResult.Create(3, 6));
+
+        outcome.TurnWasted.Should().BeFalse();
+        outcome.WastedSteps.Should().BeEmpty();
+        outcome.PlayableDice.Should().Equal([6, 3], "önce 6 indirmeyi tamamlar, ardından 3 toplamada kullanılır");
+    }
+
+    [Fact]
     public void Iki_zar_da_oynanamazsa_el_bosa_gider()
     {
         var engine = new GameEngine();

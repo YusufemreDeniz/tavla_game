@@ -22,7 +22,8 @@ public static class SnapshotMapper
                 var boards = round.PlayerStates
                     .Select(s =>
                     {
-                        var seat = room.Players.First(p => p.Id == s.PlayerId).Seat;
+                        var playerInRoom = room.Players.FirstOrDefault(p => p.Id == s.PlayerId);
+                        var seat = playerInRoom?.Seat ?? (room.Players.FirstOrDefault()?.Seat == 1 ? 2 : 1);
                         var points = s.PointStates
                             .OrderBy(ps => ps.PointNumber)
                             .Select(ps => new PointStateDto(ps.PointNumber, ps.BackCount, ps.FrontCount))

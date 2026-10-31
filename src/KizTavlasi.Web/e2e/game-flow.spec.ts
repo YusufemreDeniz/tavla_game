@@ -18,8 +18,8 @@ test.describe('Kız Tavlası tam oyun akışı', () => {
   });
 
   test.afterAll(async () => {
-    await hostContext.close();
-    await guestContext.close();
+    await hostContext?.close();
+    await guestContext?.close();
   });
 
   async function rollUntilMatchEnds(maxRolls = 500): Promise<void> {
@@ -35,20 +35,20 @@ test.describe('Kız Tavlası tam oyun akışı', () => {
         // Bekleyen hamle varsa parlayan haneye dokun.
         const moveButton = page.getByRole('button', { name: /haneyi oyna/ }).first();
         if (await moveButton.isVisible().catch(() => false)) {
-          await moveButton.click();
+          await moveButton.click({ timeout: 2000 }).catch(() => {});
           acted = true;
           break;
         }
 
         const rollButton = page.getByRole('button', { name: /zar at/i });
         if (await rollButton.isEnabled().catch(() => false)) {
-          await rollButton.click();
+          await rollButton.click({ timeout: 2000 }).catch(() => {});
           acted = true;
           break;
         }
       }
 
-      await hostPage.waitForTimeout(acted ? 100 : 250);
+      await hostPage.waitForTimeout(acted ? 120 : 250);
     }
     throw new Error('Maç beklenen hamle sayısında tamamlanmadı.');
   }

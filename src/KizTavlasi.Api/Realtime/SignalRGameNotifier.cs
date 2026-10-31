@@ -38,6 +38,10 @@ public sealed class SignalRGameNotifier : IGameNotifier
         SendWithSnapshotAsync(roomCode, GameHubEvents.PlayerConnectionChanged,
             new { roomCode, playerId, isConnected, stateVersion = snapshot.StateVersion, serverTimeUtc = snapshot.ServerTimeUtc }, snapshot, ct);
 
+    public Task StartingRollStartedAsync(string roomCode, DateTime serverTimeUtc, CancellationToken ct = default) =>
+        _hubContext.Clients.Group(GroupName(roomCode))
+            .SendAsync(GameHubEvents.StartingRollStarted, new { roomCode, serverTimeUtc }, ct);
+
     public Task MatchStartedAsync(string roomCode, RoomSnapshotDto snapshot, CancellationToken ct = default) =>
         SendWithSnapshotAsync(roomCode, GameHubEvents.MatchStarted,
             new { roomCode, match = snapshot.Match, stateVersion = snapshot.StateVersion, serverTimeUtc = snapshot.ServerTimeUtc }, snapshot, ct);
@@ -49,6 +53,10 @@ public sealed class SignalRGameNotifier : IGameNotifier
     public Task TurnStartedAsync(string roomCode, Guid currentPlayerId, int turnNumber, RoomSnapshotDto snapshot, CancellationToken ct = default) =>
         SendWithSnapshotAsync(roomCode, GameHubEvents.TurnStarted,
             new { roomCode, currentPlayerId, turnNumber, stateVersion = snapshot.StateVersion, serverTimeUtc = snapshot.ServerTimeUtc }, snapshot, ct);
+
+    public Task DiceRollStartedAsync(string roomCode, Guid playerId, DateTime serverTimeUtc, CancellationToken ct = default) =>
+        _hubContext.Clients.Group(GroupName(roomCode))
+            .SendAsync(GameHubEvents.DiceRollStarted, new { roomCode, playerId, serverTimeUtc }, ct);
 
     public Task DiceRollResolvedAsync(string roomCode, DiceRollResultDto result, RoomSnapshotDto snapshot, CancellationToken ct = default) =>
         SendWithSnapshotAsync(roomCode, GameHubEvents.DiceRollResolved,

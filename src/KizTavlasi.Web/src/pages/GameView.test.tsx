@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import GameView from './GameView';
 import { useGameStore } from '../store/gameStore';
@@ -97,7 +97,7 @@ describe('GameView', () => {
     const button = screen.getByRole('button', { name: /zar at/i });
 
     expect(button).toBeEnabled();
-    button.click();
+    fireEvent.click(button);
 
     await vi.waitFor(() => expect(onRollDice).toHaveBeenCalledWith(5));
   });
@@ -123,7 +123,7 @@ describe('GameView', () => {
     const playable = screen.getAllByRole('button', { name: /haneyi oyna/ });
     expect(playable).toHaveLength(2);
     // Tahta 1→6 sıralı çizilir; ilk tıklanabilir hane 3'tür.
-    playable[0].click();
+    fireEvent.click(playable[0]);
 
     await vi.waitFor(() => expect(onPlayMove).toHaveBeenCalledWith(3, 5));
   });
@@ -151,9 +151,51 @@ describe('GameView', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/çift bonusu/i);
     const playable = screen.getAllByRole('button', { name: /haneyi oyna/ });
     expect(playable).toHaveLength(6);
-    playable[2].click();
+    fireEvent.click(playable[2]);
 
     await vi.waitFor(() => expect(onPlayMove).toHaveBeenCalledWith(3, 5));
+  });
+
+  it('aynı zar turunda aşama geçişi varken önce son indirme hanesi tıklanabilir olur', () => {
+    const snapshot = playingSnapshot('p1');
+    const transitionSnapshot: RoomSnapshotDto = {
+      ...snapshot,
+      match: {
+        ...snapshot.match!,
+        currentRound: {
+          ...snapshot.match!.currentRound!,
+          pendingDice: [6, 3],
+          boards: snapshot.match!.currentRound!.boards.map((b) =>
+            b.playerId === 'p1'
+              ? {
+                  ...b,
+                  isCollecting: false,
+                  points: b.points.map((p) =>
+                    p.pointNumber === 6
+                      ? { pointNumber: 6, backCount: 2, frontCount: 1 }
+                      : { pointNumber: p.pointNumber, backCount: 1, frontCount: 1 },
+                  ),
+                }
+              : b,
+          ),
+        },
+      },
+    };
+
+    renderGameView(transitionSnapshot);
+
+    const playable = screen.getAllByRole('button', { name: /haneyi oyna/ });
+    expect(playable).toHaveLength(1);
+    expect(playable[0]).toHaveAttribute('aria-label', '6. haneyi oyna');
+  });
+
+  it('rakip bağlantısı koptuğunda bilgilendirme bandı görünür', () => {
+    const snapshot = playingSnapshot('p1');
+    snapshot.players[1].isConnected = false;
+
+    renderGameView(snapshot);
+
+    expect(screen.getByText(/bağlantısı koptu/i)).toBeInTheDocument();
   });
 
   it('skor ve oyuncu adları görünür', () => {
