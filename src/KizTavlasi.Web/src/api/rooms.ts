@@ -1,13 +1,40 @@
 import { apiRequest } from './client';
 import type {
+  BotDifficulty,
   CreateRoomResult,
   JoinRoomResult,
   PublicConfigDto,
   RoomSnapshotDto,
+  WatchRoomResult,
 } from '../types/game';
 
-export function createRoom(displayName: string, bestOf: number): Promise<CreateRoomResult> {
-  return apiRequest('/api/rooms', { method: 'POST', body: { displayName, bestOf } });
+export function createRoom(
+  displayName: string,
+  bestOf: number,
+  turnTimeLimitSeconds: number | null = null,
+): Promise<CreateRoomResult> {
+  return apiRequest('/api/rooms', {
+    method: 'POST',
+    body: { displayName, bestOf, turnTimeLimitSeconds },
+  });
+}
+
+/** Yapay zekâya karşı oda: bot misafir koltuğuna oturur, maç lobiden hemen başlatılabilir. */
+export function createBotRoom(
+  displayName: string,
+  bestOf: number,
+  difficulty: BotDifficulty,
+  turnTimeLimitSeconds: number | null = null,
+): Promise<CreateRoomResult> {
+  return apiRequest('/api/rooms/bot', {
+    method: 'POST',
+    body: { displayName, bestOf, difficulty, turnTimeLimitSeconds },
+  });
+}
+
+/** Dolu odayı salt okunur izlemek için izleyici token'ı alır. */
+export function watchRoom(roomCode: string): Promise<WatchRoomResult> {
+  return apiRequest(`/api/rooms/${encodeURIComponent(roomCode)}/watch`, { method: 'POST' });
 }
 
 export function joinRoom(roomCode: string, displayName: string): Promise<JoinRoomResult> {

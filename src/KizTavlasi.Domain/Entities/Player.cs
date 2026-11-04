@@ -13,5 +13,10 @@ public class Player
     public DateTime LastSeenAtUtc { get; set; }
     public DateTime? DisconnectedAtUtc { get; set; }
 
+    /// <summary>Yapay zekâ oyuncusuysa zorluk seviyesi; insan oyuncularda <c>null</c>.</summary>
+    public BotDifficulty? BotDifficulty { get; set; }
+
+    public bool IsBot => BotDifficulty is not null;
+
     public GameRoom Room { get; set; } = null!;
 }

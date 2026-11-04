@@ -153,6 +153,10 @@ export class GameHubClient {
       },
     );
 
+    connection.on('SpectatorCountChanged', (payload: { roomCode: string; count: number }) => {
+      store().setSpectatorCount(payload.count);
+    });
+
     // Snapshot zaten GameStateUpdated ile geliyor; bu eventler ayrıca bir işlem gerektirmiyor.
     connection.on('PlayerJoined', () => {});
     connection.on('PlayerLeft', () => {});

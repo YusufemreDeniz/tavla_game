@@ -68,6 +68,10 @@ public sealed class ApiTestFixture : WebApplicationFactory<Program>, IAsyncLifet
         builder.UseSetting("RateLimiting:GlobalPerMinute", "10000");
         builder.UseSetting("RateLimiting:RoomCreatePerMinute", "10000");
         builder.UseSetting("RateLimiting:RoomJoinPerMinute", "10000");
+        // Bot düşünme süresi ve el başı beklemesi testlerde kısaltılır.
+        builder.UseSetting("Game:BotMinDelayMs", "40");
+        builder.UseSetting("Game:BotMaxDelayMs", "80");
+        builder.UseSetting("Game:RoundStartGraceMs", "0");
 
         builder.ConfigureTestServices(services =>
         {

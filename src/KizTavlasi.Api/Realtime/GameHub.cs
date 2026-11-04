@@ -32,6 +32,40 @@ public sealed class GameHub : Hub
 
     private static string GroupName(string roomCode) => $"room:{roomCode}";
 
+    private bool IsSpectator => PlayerSessionResolver.IsSpectator(Context.User!);
+
+    /// <summary>
+    /// İzleyici bağlantısı: oyuncu kaydı yoktur; yalnızca odanın grubuna katılır ve snapshot alır.
+    /// Komut metotları <see cref="GetValidatedSessionAsync"/> üzerinden SPECTATOR_READ_ONLY ile reddedilir.
+    /// </summary>
+    private async Task<SpectatorSession> GetValidatedSpectatorAsync()
+    {
+        var spectator = PlayerSessionResolver.ResolveSpectator(Context.User!);
+        // Oda hâlâ var ve süresi dolmadı mı? (snapshot üretimi bunu doğrular)
+        await _roomService.GetSpectatorStateAsync(spectator.RoomId, Context.ConnectionAborted);
+        return spectator;
+    }
+
+    private Task BroadcastSpectatorCountAsync(string roomCode, int count) =>
+        Clients.Group(GroupName(roomCode)).SendAsync(GameHubEvents.SpectatorCountChanged, new
+        {
+            roomCode,
+            count,
+            serverTimeUtc = _timeProvider.GetUtcNow().UtcDateTime
+        });
+
+    private async Task SendSpectatorSnapshotAsync(SpectatorSession spectator)
+    {
+        var snapshot = await _roomService.GetSpectatorStateAsync(spectator.RoomId, Context.ConnectionAborted);
+        await Clients.Caller.SendAsync(GameHubEvents.RoomSnapshotReceived, snapshot, Context.ConnectionAborted);
+        await Clients.Caller.SendAsync(GameHubEvents.SpectatorCountChanged, new
+        {
+            roomCode = spectator.RoomCode,
+            count = SpectatorTracker.Count(spectator.RoomCode),
+            serverTimeUtc = _timeProvider.GetUtcNow().UtcDateTime
+        }, Context.ConnectionAborted);
+    }
+
     private async Task<PlayerSession> GetValidatedSessionAsync()
     {
         var session = PlayerSessionResolver.Resolve(Context.User!);
@@ -41,6 +75,16 @@ public sealed class GameHub : Hub
 
     public override async Task OnConnectedAsync()
     {
+        if (IsSpectator)
+        {
+            var spectator = await GetValidatedSpectatorAsync();
+            await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(spectator.RoomCode));
+            var count = SpectatorTracker.Add(spectator.RoomCode, Context.ConnectionId);
+            await BroadcastSpectatorCountAsync(spectator.RoomCode, count);
+            await base.OnConnectedAsync();
+            return;
+        }
+
         var session = await GetValidatedSessionAsync();
         await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(session.RoomCode));
         await _roomService.SetConnectionStateAsync(
@@ -53,6 +97,18 @@ public sealed class GameHub : Hub
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        if (IsSpectator)
+        {
+            var roomCode = Context.User!.FindFirst(Infrastructure.Security.GameClaimTypes.RoomCode)?.Value;
+            if (roomCode is not null)
+            {
+                var count = SpectatorTracker.Remove(roomCode, Context.ConnectionId);
+                await BroadcastSpectatorCountAsync(roomCode, count);
+            }
+            await base.OnDisconnectedAsync(exception);
+            return;
+        }
+
         try
         {
             var session = PlayerSessionResolver.Resolve(Context.User!);
@@ -70,13 +126,33 @@ public sealed class GameHub : Hub
 
     public async Task JoinRoom()
     {
+        if (IsSpectator)
+        {
+            await SendSpectatorSnapshotAsync(await GetValidatedSpectatorAsync());
+            return;
+        }
+
         var session = await GetValidatedSessionAsync();
         var snapshot = await _roomService.GetRoomStateAsync(session, Context.ConnectionAborted);
         await Clients.Caller.SendAsync(GameHubEvents.RoomSnapshotReceived, snapshot, Context.ConnectionAborted);
+        await Clients.Caller.SendAsync(GameHubEvents.SpectatorCountChanged, new
+        {
+            roomCode = session.RoomCode,
+            count = SpectatorTracker.Count(session.RoomCode),
+            serverTimeUtc = _timeProvider.GetUtcNow().UtcDateTime
+        }, Context.ConnectionAborted);
     }
 
     public async Task RejoinRoom()
     {
+        if (IsSpectator)
+        {
+            var spectator = await GetValidatedSpectatorAsync();
+            await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(spectator.RoomCode));
+            await SendSpectatorSnapshotAsync(spectator);
+            return;
+        }
+
         var session = await GetValidatedSessionAsync();
         await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(session.RoomCode));
         await _roomService.SetConnectionStateAsync(

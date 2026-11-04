@@ -2,14 +2,16 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Dices, Users, BookOpen, Volume2, VolumeX, Share2, Sparkles } from 'lucide-react';
+import { Bot, Dices, Users, BookOpen, Volume2, VolumeX, Share2, Sparkles } from 'lucide-react';
 import { z } from 'zod';
-import { createRoom } from '../api/rooms';
+import { createBotRoom, createRoom } from '../api/rooms';
 import { ApiError } from '../api/client';
 import { savePlayerToken } from '../lib/session';
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from '../config/branding';
 import { useUiStore } from '../store/uiStore';
 import RulesModal from '../components/RulesModal';
+import OptionGroup from '../components/OptionGroup';
+import type { BotDifficulty } from '../types/game';
 
 const nameSchema = z
   .string()
@@ -28,6 +30,18 @@ const BEST_OF_OPTIONS = [
   { value: 5, label: '5 El', sub: '3 Puana' },
 ];
 
+/** 0 = süresiz (sunucuya null gönderilir). */
+const TURN_TIMER_OPTIONS = [
+  { value: 0, label: 'Süresiz', sub: 'Rahat oyun' },
+  { value: 30, label: '30 sn', sub: 'Turnuva' },
+  { value: 15, label: '15 sn', sub: 'Hızlı mod' },
+];
+
+const BOT_DIFFICULTY_OPTIONS: { value: BotDifficulty; label: string; sub: string }[] = [
+  { value: 'Easy', label: 'Kolay', sub: 'Çırak Bot' },
+  { value: 'Master', label: 'Usta', sub: 'Usta Bot' },
+];
+
 export default function HomePage() {
   const navigate = useNavigate();
   const showToast = useUiStore((s) => s.showToast);
@@ -37,12 +51,17 @@ export default function HomePage() {
 
   const [createName, setCreateName] = useState('');
   const [bestOf, setBestOf] = useState(3);
+  const [turnTimer, setTurnTimer] = useState(0);
+  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('Easy');
   const [joinCode, setJoinCode] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
 
   const createMutation = useMutation({
-    mutationFn: () => createRoom(createName.trim(), bestOf),
+    mutationFn: (mode: 'friend' | 'bot') =>
+      mode === 'bot'
+        ? createBotRoom(createName.trim(), bestOf, botDifficulty, turnTimer || null)
+        : createRoom(createName.trim(), bestOf, turnTimer || null),
     onSuccess: (result) => {
       savePlayerToken(result.roomCode, result.playerToken);
       navigate(`/oda/${result.roomCode}`);
@@ -52,15 +71,19 @@ export default function HomePage() {
     },
   });
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitCreate = (mode: 'friend' | 'bot') => {
     const parsed = nameSchema.safeParse(createName);
     if (!parsed.success) {
       setCreateError(parsed.error.issues[0].message);
       return;
     }
     setCreateError(null);
-    createMutation.mutate();
+    createMutation.mutate(mode);
+  };
+
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitCreate('friend');
   };
 
   const handleJoin = (e: React.FormEvent) => {
@@ -168,13 +191,47 @@ export default function HomePage() {
                 ))}
               </div>
             </fieldset>
+            <OptionGroup
+              legend="Hamle süresi"
+              options={TURN_TIMER_OPTIONS}
+              value={turnTimer}
+              onChange={setTurnTimer}
+            />
             <button
               type="submit"
               disabled={createMutation.isPending}
               className="min-h-11 w-full rounded-xl bg-gradient-to-r from-bordo-600 to-bordo-700 px-4 py-3 font-semibold text-cream-50 shadow-lg transition-transform hover:scale-[1.01] disabled:opacity-60"
             >
-              {createMutation.isPending ? 'Oda oluşturuluyor…' : 'Oda Oluştur'}
+              {createMutation.isPending && createMutation.variables === 'friend'
+                ? 'Oda oluşturuluyor…'
+                : 'Oda Oluştur'}
             </button>
+
+            {/* Arkadaş beklemeden: aynı ad, format ve süreyle yapay zekâya karşı. */}
+            <div className="rounded-xl border border-gold-500/20 bg-night-950/50 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-cream-100">
+                <Bot size={16} className="text-gold-400" aria-hidden="true" />
+                Arkadaşın yok mu? Hemen dene
+              </p>
+              <OptionGroup
+                legend="Bot zorluğu"
+                options={BOT_DIFFICULTY_OPTIONS}
+                value={botDifficulty}
+                onChange={setBotDifficulty}
+                columns={2}
+              />
+              <button
+                type="button"
+                onClick={() => submitCreate('bot')}
+                disabled={createMutation.isPending}
+                className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-gold-500/50 bg-night-700 px-4 py-3 font-semibold text-gold-400 transition-colors hover:bg-night-600 disabled:opacity-60"
+              >
+                <Bot size={18} aria-hidden="true" />
+                {createMutation.isPending && createMutation.variables === 'bot'
+                  ? 'Masa hazırlanıyor…'
+                  : 'Yapay Zekâya Karşı Oyna'}
+              </button>
+            </div>
           </form>
         </motion.section>
 

@@ -36,6 +36,17 @@ MediatR kullanılmadı: use case sayısı az, doğrudan application service ça�
   `roomCode`, `stateVersion`, `serverTimeUtc` bulunur.
 - İstemci `incomingStateVersion <= currentStateVersion` olan eventleri reddeder.
 
+## Otomatik Eylemler (Bot Rakip ve Hamle Süresi)
+
+- `BotStrategy` (Domain): saf, deterministik hamle seçimi; yalnızca `GameEngine.CanPlay` ile geçerli olan
+  haneler arasından seçer. Kolay = rastgele geçerli hamle, Usta = gelecekte boşa gidecek zarı azaltan sezgisel.
+- `TurnDeadlines` (Application): her mutasyonda `Round.TurnDeadlineUtc` hesaplanır (bot düşünme süresi,
+  hamle süresi, el başı beklemesi).
+- `TurnAutomationRunner` (Application): zamanı gelen eylemi `GameService` üzerinden uygular.
+- `TurnAutomationService` (Infrastructure, `BackgroundService` + `ITurnAutomationScheduler`): GameService
+  commit SONRASI zamanlar; oda başına tek bellek içi zamanlayıcı + kaçırılan işler için periyodik DB taraması
+  (`Game:AutomationSweepSeconds`). Sunucu yeniden başlasa da eylem kaybolmaz.
+
 ## Concurrency
 
 - `rowversion` (optimistic concurrency) + `StateVersion` + `CommandId` unique index.

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Home, RotateCcw, Sparkles, Trophy, WifiOff } from 'lucide-react';
+import { Bot, Eye, Home, RotateCcw, Sparkles, Trophy, WifiOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { RoomSnapshotDto } from '../types/game';
 import { useGameStore } from '../store/gameStore';
 import { useUiStore } from '../store/uiStore';
 import Die from '../components/Die';
 import DiceTray from '../components/DiceTray';
+import TurnTimer from '../components/TurnTimer';
 import BackgammonBoard, { type PointFlash } from '../components/BackgammonBoard';
 import ConnectionDot from '../components/ConnectionDot';
 import ShareLinkCard from '../components/ShareLinkCard';
@@ -32,6 +33,8 @@ interface GameViewProps {
   onAcceptRematch: () => void;
   onDeclineRematch: () => void;
   onLeave: () => void;
+  /** Salt okunur izleyici: tahta 1. koltuğun bakışından gösterilir, komut düğmeleri yoktur. */
+  spectator?: boolean;
 }
 
 export default function GameView({
@@ -43,6 +46,7 @@ export default function GameView({
   onAcceptRematch,
   onDeclineRematch,
   onLeave,
+  spectator = false,
 }: GameViewProps) {
   const navigate = useNavigate();
   const myPlayerId = useGameStore((s) => s.myPlayerId);
@@ -96,13 +100,19 @@ export default function GameView({
   const match = snapshot.match;
   const round = match?.currentRound ?? null;
   const players = snapshot.players;
-  const me = players.find((p) => p.id === myPlayerId) ?? null;
-  const opponent = players.find((p) => p.id !== myPlayerId) ?? null;
+  // İzleyici bir oyuncu değildir: tahtayı 1. koltuğun bakışından görür.
+  const me =
+    players.find((p) => p.id === myPlayerId) ??
+    (spectator ? (players.find((p) => p.seat === 1) ?? null) : null);
+  const viewerId = me?.id ?? null;
+  const opponent = players.find((p) => p.id !== viewerId) ?? null;
+  const currentPlayer = players.find((p) => p.id === round?.currentPlayerId) ?? null;
 
-  const myBoard = round?.boards.find((b) => b.playerId === myPlayerId) ?? null;
-  const opponentBoard = round?.boards.find((b) => b.playerId !== myPlayerId) ?? null;
+  const myBoard = round?.boards.find((b) => b.playerId === viewerId) ?? null;
+  const opponentBoard = round?.boards.find((b) => b.playerId !== viewerId) ?? null;
 
-  const isMyTurn = round?.currentPlayerId === myPlayerId && round?.status === 'InProgress';
+  const isMyTurn =
+    !spectator && round?.currentPlayerId === myPlayerId && round?.status === 'InProgress';
   const matchCompleted = match?.status === 'Completed';
   const roundPendingDice = round?.pendingDice;
   const pendingDice = useMemo(() => roundPendingDice ?? [], [roundPendingDice]);
@@ -212,7 +222,8 @@ export default function GameView({
   useEffect(() => {
     if (!lastRoundEnded) return;
     if (soundEnabled) {
-      const iWon = lastRoundEnded.winnerPlayerId === myPlayerId;
+      // İzleyici için her el sonu bir kutlamadır.
+      const iWon = spectator || lastRoundEnded.winnerPlayerId === myPlayerId;
       if (iWon && lastRoundEnded.isMars) playMarsFanfare();
       else if (iWon) playWinSound();
       else playLoseSound();
@@ -228,7 +239,7 @@ export default function GameView({
       const timer = setTimeout(() => setRoundEnded(null), duration);
       return () => clearTimeout(timer);
     }
-  }, [lastRoundEnded, myPlayerId, soundEnabled, fastMode, setRoundEnded]);
+  }, [lastRoundEnded, myPlayerId, soundEnabled, fastMode, setRoundEnded, spectator]);
 
   // Sıra el değiştirince gösterilen zarları temizle.
   useEffect(() => {
@@ -280,15 +291,23 @@ export default function GameView({
       (matchCompleted && lastMatchEnded?.isMars),
   );
   const marsWon =
-    lastRoundEnded?.isMars === true
+    spectator ||
+    (lastRoundEnded?.isMars === true
       ? lastRoundEnded.winnerPlayerId === myPlayerId
-      : winnerPlayer?.id === myPlayerId;
+      : winnerPlayer?.id === myPlayerId);
 
   const totalRemainingMoves = pendingDice.length + pendingPicks;
 
+  const currentName = currentPlayer?.displayName ?? 'Oyuncu';
   const statusText = matchCompleted
     ? 'Maç bitti'
-    : iMustMove
+    : spectator
+      ? hasPendingMoves
+        ? `${currentName} hamlesini oynuyor…`
+        : `${currentName} zar atıyor…`
+      : !isMyTurn && opponent?.isBot
+        ? `${opponent.displayName} düşünüyor…`
+        : iMustMove
       ? pendingDice.length > 0
         ? `Hanelere dokun: ${[...new Set(pendingDice)].join(' ve ')}`
         : `${pendingPicks} serbest hamle hakkın var`
@@ -298,8 +317,26 @@ export default function GameView({
           ? 'Sıra sende — zar at!'
           : `${opponent?.displayName} zar atıyor…`;
 
+  const showTimer =
+    Boolean(snapshot.turnTimeLimitSeconds) &&
+    Boolean(round?.turnDeadlineUtc) &&
+    round?.status === 'InProgress' &&
+    !matchCompleted &&
+    currentPlayer !== null &&
+    !currentPlayer.isBot;
+
   const centerContent = (
     <div className="flex w-full items-center justify-between gap-2 md:gap-4">
+      {showTimer && round?.turnDeadlineUtc && (
+        <TurnTimer
+          key={round.turnDeadlineUtc}
+          deadlineUtc={round.turnDeadlineUtc}
+          serverTimeUtc={snapshot.serverTimeUtc}
+          limitSeconds={snapshot.turnTimeLimitSeconds ?? 30}
+          isMine={isMyTurn}
+          soundEnabled={soundEnabled}
+        />
+      )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-[11px] font-medium text-cream-100 md:text-sm" role="status">
           {statusText}
@@ -319,7 +356,13 @@ export default function GameView({
         />
       </div>
 
-      {!matchCompleted && (
+      {!matchCompleted && spectator && (
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-gold-500/30 bg-night-900/70 px-2.5 py-1 text-[11px] font-semibold text-gold-400">
+          <Eye size={13} aria-hidden="true" />
+          İzleyici
+        </span>
+      )}
+      {!matchCompleted && !spectator && (
         <button
           type="button"
           onClick={handleRoll}
@@ -346,6 +389,7 @@ export default function GameView({
           className="flex items-center justify-between rounded-2xl border border-gold-500/20 bg-gradient-to-b from-night-800 to-night-900 px-3.5 py-3 shadow-lg md:px-5"
         >
           <PlayerScore
+            isBot={players.find((p) => p.seat === 1)?.isBot}
             name={players.find((p) => p.seat === 1)?.displayName ?? '—'}
             isConnected={players.find((p) => p.seat === 1)?.isConnected ?? false}
             isTurn={seatOf(round?.currentPlayerId) === 1 && !matchCompleted}
@@ -361,6 +405,7 @@ export default function GameView({
             </p>
           </div>
           <PlayerScore
+            isBot={players.find((p) => p.seat === 2)?.isBot}
             name={players.find((p) => p.seat === 2)?.displayName ?? '—'}
             isConnected={players.find((p) => p.seat === 2)?.isConnected ?? false}
             isTurn={seatOf(round?.currentPlayerId) === 2 && !matchCompleted}
@@ -447,8 +492,8 @@ export default function GameView({
           opponentName={opponent.displayName}
           isMyTurn={Boolean(isMyTurn) && !matchCompleted}
           clickablePoints={clickablePoints}
-          myFlash={moveFlash && moveFlash.playerId === myPlayerId ? moveFlash : null}
-          opponentFlash={moveFlash && moveFlash.playerId !== myPlayerId ? moveFlash : null}
+          myFlash={moveFlash && moveFlash.playerId === viewerId ? moveFlash : null}
+          opponentFlash={moveFlash && moveFlash.playerId !== viewerId ? moveFlash : null}
           shakeToken={shakeToken}
           onPickPoint={handlePickPoint}
           centerContent={centerContent}
@@ -456,7 +501,7 @@ export default function GameView({
       )}
 
       {/* Tepkiler */}
-      {!matchCompleted && <ReactionsBar onSend={onSendReaction} />}
+      {!matchCompleted && !spectator && <ReactionsBar onSend={onSendReaction} />}
 
       {/* Oyun geçmişi */}
       {history.length > 0 && (
@@ -545,7 +590,9 @@ export default function GameView({
               <Confetti />
               <Trophy size={48} className="mx-auto mb-3 text-gold-400" aria-hidden="true" />
               <h2 className="font-display text-2xl font-bold text-cream-50">
-                {winnerPlayer.id === myPlayerId ? 'Tebrikler, kazandın!' : `${winnerPlayer.displayName} maçı kazandı`}
+                {!spectator && winnerPlayer.id === myPlayerId
+                  ? 'Tebrikler, kazandın!'
+                  : `${winnerPlayer.displayName} maçı kazandı`}
               </h2>
               {lastMatchEnded?.isMars && (
                 <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-gold-500/20 px-3 py-1 text-sm font-black tracking-wider text-gold-400">
@@ -578,7 +625,11 @@ export default function GameView({
               </div>
 
               <div className="mt-6 space-y-2.5">
-                {rematchRequestedByOpponent ? (
+                {spectator ? (
+                  <p className="rounded-xl border border-night-600 px-4 py-3 text-sm text-cream-300" role="status">
+                    Maçı izlediğin için teşekkürler! Oyuncular rövanşa karar verirse yeni maç burada başlar.
+                  </p>
+                ) : rematchRequestedByOpponent ? (
                   <>
                     <p className="text-sm font-medium text-gold-400">Rakibin rövanş istiyor!</p>
                     <div className="flex gap-2">
@@ -600,7 +651,9 @@ export default function GameView({
                   </>
                 ) : rematchRequestedByMe ? (
                   <p className="rounded-xl border border-night-600 px-4 py-3 text-sm text-cream-300" role="status">
-                    Rövanş isteği gönderildi, rakip bekleniyor…
+                    {opponent?.isBot
+                      ? `${opponent.displayName} rövanşı kabul ediyor…`
+                      : 'Rövanş isteği gönderildi, rakip bekleniyor…'}
                   </p>
                 ) : (
                   <button
@@ -642,18 +695,21 @@ function PlayerScore({
   isConnected,
   isTurn,
   isMe = false,
+  isBot = false,
   alignRight = false,
 }: {
   name: string;
   isConnected: boolean;
   isTurn: boolean;
   isMe?: boolean;
+  isBot?: boolean;
   alignRight?: boolean;
 }) {
   return (
     <div className={`flex min-w-0 flex-col gap-0.5 ${alignRight ? 'items-end text-right' : 'items-start'}`}>
       <span className={`flex items-center gap-1.5 text-sm font-semibold ${isTurn ? 'text-gold-400' : 'text-cream-100'}`}>
         {isTurn && <span className="anim-turn-dot inline-block h-2 w-2 rounded-full bg-gold-400" aria-hidden="true" />}
+        {isBot && <Bot size={14} className="shrink-0 text-gold-400" aria-label="Yapay zekâ" />}
         <span className="truncate">{name}</span>
         {isMe && <span className="text-[10px] font-normal text-cream-400">(sen)</span>}
       </span>

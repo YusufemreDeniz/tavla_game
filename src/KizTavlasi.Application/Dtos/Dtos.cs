@@ -2,7 +2,10 @@ using KizTavlasi.Domain;
 
 namespace KizTavlasi.Application.Dtos;
 
-public sealed record CreateRoomRequest(string DisplayName, int BestOf);
+public sealed record CreateRoomRequest(string DisplayName, int BestOf, int? TurnTimeLimitSeconds = null);
+
+/// <param name="Difficulty">"Easy" (Kolay) veya "Master" (Usta).</param>
+public sealed record CreateBotRoomRequest(string DisplayName, int BestOf, string Difficulty, int? TurnTimeLimitSeconds = null);
 
 public sealed record JoinRoomRequest(string DisplayName);
 
@@ -11,7 +14,8 @@ public sealed record PlayerDto(
     string DisplayName,
     int Seat,
     bool IsConnected,
-    bool IsHost);
+    bool IsHost,
+    bool IsBot = false);
 
 public sealed record PointStateDto(int PointNumber, int BackCount, int FrontCount);
 
@@ -32,7 +36,8 @@ public sealed record RoundDto(
     int TurnNumber,
     IReadOnlyList<int> PendingDice,
     int PendingBonusPicks,
-    IReadOnlyList<PlayerBoardDto> Boards);
+    IReadOnlyList<PlayerBoardDto> Boards,
+    DateTime? TurnDeadlineUtc = null);
 
 public sealed record MatchDto(
     Guid Id,
@@ -54,13 +59,20 @@ public sealed record RoomSnapshotDto(
     MatchDto? Match,
     Guid? RematchRequestedByPlayerId,
     long StateVersion,
-    DateTime ServerTimeUtc);
+    DateTime ServerTimeUtc,
+    int? TurnTimeLimitSeconds = null);
 
 public sealed record CreateRoomResult(
     string RoomCode,
     string SharePath,
     string PlayerToken,
     PlayerDto Player,
+    RoomSnapshotDto RoomState);
+
+/// <summary>İzleyici girişi: salt okunur token ve anlık durum.</summary>
+public sealed record WatchRoomResult(
+    string RoomCode,
+    string SpectatorToken,
     RoomSnapshotDto RoomState);
 
 public sealed record JoinRoomResult(
@@ -126,7 +138,11 @@ public sealed record StartMatchResult(StartingRollDto StartingRoll, RoomSnapshot
 
 public sealed record RollDiceResult(DiceRollResultDto Roll, RoomSnapshotDto Snapshot, bool WasAlreadyProcessed);
 
-public sealed record PublicConfigDto(string ProductName, IReadOnlyList<int> SupportedBestOf, IReadOnlyList<string> AllowedReactions);
+public sealed record PublicConfigDto(
+    string ProductName,
+    IReadOnlyList<int> SupportedBestOf,
+    IReadOnlyList<string> AllowedReactions,
+    IReadOnlyList<int> SupportedTurnTimeLimits);
 
 public static class DtoExtensions
 {

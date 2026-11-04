@@ -19,6 +19,9 @@ public sealed class TestHarness : IDisposable
     public RoomService RoomService { get; }
     public GameService GameService { get; }
     public RoomCleanupService CleanupService { get; }
+    public TurnAutomationRunner Automation { get; }
+    public RecordingScheduler Scheduler { get; } = new();
+    public GameOptions GameSettings { get; } = new();
     public QueueDiceService Dice { get; } = new();
     public RecordingNotifier Notifier { get; }
     public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 7, 6, 12, 0, 0, TimeSpan.Zero));
@@ -30,7 +33,7 @@ public sealed class TestHarness : IDisposable
         Db = database.CreateContext();
         Notifier = new RecordingNotifier(() => Db.Database.CurrentTransaction is not null);
 
-        var gameOptions = Options.Create(new GameOptions());
+        var gameOptions = Options.Create(GameSettings);
         var jwtOptions = Options.Create(new JwtOptions
         {
             SigningKey = "test-signing-key-for-unit-tests-0123456789abcdef",
@@ -57,7 +60,16 @@ public sealed class TestHarness : IDisposable
             Notifier,
             new GameEngine(GameRulesOptions.Default),
             Time,
-            NullLogger<GameService>.Instance);
+            NullLogger<GameService>.Instance,
+            Scheduler,
+            gameOptions);
+
+        Automation = new TurnAutomationRunner(
+            Db,
+            RoomService,
+            GameService,
+            Time,
+            NullLogger<TurnAutomationRunner>.Instance);
 
         var services = new ServiceCollection();
         services.AddScoped(_ => database.CreateContext());
@@ -91,6 +103,16 @@ public sealed class TestHarness : IDisposable
         _cleanupScopeProvider.Dispose();
         Db.Dispose();
     }
+}
+
+/// <summary>Zamanlanan otomatik eylemleri kaydeder; testler runner'ı FakeTimeProvider ile elle tetikler.</summary>
+public sealed class RecordingScheduler : ITurnAutomationScheduler
+{
+    public List<(Guid RoomId, DateTime? DueUtc)> Calls { get; } = [];
+
+    public DateTime? LastDue(Guid roomId) => Calls.LastOrDefault(c => c.RoomId == roomId).DueUtc;
+
+    public void Schedule(Guid roomId, DateTime? dueUtc) => Calls.Add((roomId, dueUtc));
 }
 
 /// <summary>Testlerde sıradaki zar değerlerini kuyruğa yazarak deterministik oyun sağlar.</summary>

@@ -194,3 +194,20 @@ body {
 .anim-double-glow {
   animation: double-glow 1.4s ease-in-out 0.45s infinite;
 }
+
+/* Hamle süresinin son 5 saniyesi: zarif nabız. */
+@keyframes timer-urgent {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgba(224, 82, 82, 0));
+  }
+  50% {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 6px rgba(224, 82, 82, 0.75));
+  }
+}
+
+.anim-timer-urgent {
+  animation: timer-urgent 1s ease-in-out infinite;
+}

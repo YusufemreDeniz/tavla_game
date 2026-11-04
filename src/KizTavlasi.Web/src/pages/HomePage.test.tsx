@@ -6,10 +6,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import HomePage from './HomePage';
 
 const createRoomMock = vi.fn();
+const createBotRoomMock = vi.fn();
 const navigateMock = vi.fn();
 
 vi.mock('../api/rooms', () => ({
   createRoom: (...args: unknown[]) => createRoomMock(...args),
+  createBotRoom: (...args: unknown[]) => createBotRoomMock(...args),
 }));
 
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -70,10 +72,51 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: 'Oda Oluştur' }));
 
     await vi.waitFor(() => {
-      expect(createRoomMock).toHaveBeenCalledWith('Ayşe', 5);
+      expect(createRoomMock).toHaveBeenCalledWith('Ayşe', 5, null);
       expect(navigateMock).toHaveBeenCalledWith('/oda/7K9M2X');
     });
     expect(sessionStorage.getItem('kiztavlasi:token:7K9M2X')).toBe('test-token');
+  });
+
+  it('hamle süresi seçilerek oda oluşturulur', async () => {
+    createRoomMock.mockResolvedValue({ roomCode: 'HJKMNP', playerToken: 't', roomState: {} });
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await user.type(screen.getByLabelText(/oyuncu adın/i), 'Ayşe');
+    await user.click(screen.getByRole('radio', { name: /30 sn/ }));
+    await user.click(screen.getByRole('button', { name: 'Oda Oluştur' }));
+
+    await vi.waitFor(() => expect(createRoomMock).toHaveBeenCalledWith('Ayşe', 3, 30));
+  });
+
+  it('yapay zekâya karşı oyna: seçilen zorluk, format ve süreyle bot odası açılır', async () => {
+    createBotRoomMock.mockResolvedValue({ roomCode: 'BOT234', playerToken: 'bot-room-token', roomState: {} });
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await user.type(screen.getByLabelText(/oyuncu adın/i), 'Ayşe');
+    await user.click(screen.getByRole('radio', { name: 'Tek El' }));
+    await user.click(screen.getByRole('radio', { name: /15 sn/ }));
+    await user.click(screen.getByRole('radio', { name: /Usta/ }));
+    await user.click(screen.getByRole('button', { name: /yapay zekâya karşı oyna/i }));
+
+    await vi.waitFor(() => {
+      expect(createBotRoomMock).toHaveBeenCalledWith('Ayşe', 1, 'Master', 15);
+      expect(navigateMock).toHaveBeenCalledWith('/oda/BOT234');
+    });
+    expect(createRoomMock).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('kiztavlasi:token:BOT234')).toBe('bot-room-token');
+  });
+
+  it('bot modunda da ad doğrulaması yapılır', async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    await user.click(screen.getByRole('button', { name: /yapay zekâya karşı oyna/i }));
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(createBotRoomMock).not.toHaveBeenCalled();
   });
 
   it('geçersiz oda kodu hata gösterir', async () => {

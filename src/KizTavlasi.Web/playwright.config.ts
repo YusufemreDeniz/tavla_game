@@ -31,6 +31,10 @@ export default defineConfig({
       RateLimiting__GlobalPerMinute: '100000',
       RateLimiting__RoomCreatePerMinute: '100000',
       RateLimiting__RoomJoinPerMinute: '100000',
+      // Bot düşünme süresi ve el başı beklemesi E2E'de kısaltılır.
+      Game__BotMinDelayMs: '60',
+      Game__BotMaxDelayMs: '140',
+      Game__RoundStartGraceMs: '400',
     },
   },
 });

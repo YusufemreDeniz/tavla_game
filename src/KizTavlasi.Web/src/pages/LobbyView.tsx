@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
-import { Crown, User, Hourglass } from 'lucide-react';
-import type { RoomSnapshotDto } from '../types/game';
+import { Bot, Crown, Eye, Hourglass, Timer, User } from 'lucide-react';
+import type { BotDifficulty, RoomSnapshotDto } from '../types/game';
 import ConnectionDot from '../components/ConnectionDot';
 import { useGameStore } from '../store/gameStore';
 
@@ -13,13 +13,17 @@ const FORMAT_LABELS: Record<number, string> = {
 interface LobbyViewProps {
   snapshot: RoomSnapshotDto;
   onStartMatch: () => void;
+  /** Rakip beklerken aynı ayarlarla yapay zekâya karşı yeni masa açar. */
+  onPlayBot?: (difficulty: BotDifficulty) => void;
+  spectator?: boolean;
 }
 
-export default function LobbyView({ snapshot, onStartMatch }: LobbyViewProps) {
+export default function LobbyView({ snapshot, onStartMatch, onPlayBot, spectator = false }: LobbyViewProps) {
   const myPlayerId = useGameStore((s) => s.myPlayerId);
   const me = snapshot.players.find((p) => p.id === myPlayerId);
-  const isHost = me?.isHost ?? false;
+  const isHost = !spectator && (me?.isHost ?? false);
   const bothPlayersPresent = snapshot.players.length === 2;
+  const hasBot = snapshot.players.some((p) => p.isBot);
 
   return (
     <div className="space-y-4">
@@ -45,13 +49,19 @@ export default function LobbyView({ snapshot, onStartMatch }: LobbyViewProps) {
               <span className="flex items-center gap-2.5 text-sm font-medium text-cream-100">
                 {player.isHost ? (
                   <Crown size={16} className="text-gold-400" aria-label="Oda sahibi" />
+                ) : player.isBot ? (
+                  <Bot size={16} className="text-gold-400" aria-label="Yapay zekâ" />
                 ) : (
                   <User size={16} className="text-cream-400" aria-hidden="true" />
                 )}
                 <span>{player.displayName}</span>
                 {player.id === myPlayerId && <span className="text-xs text-cream-400">(sen)</span>}
               </span>
-              <ConnectionDot isConnected={player.isConnected} />
+              {player.isBot ? (
+                <span className="text-xs text-gold-400">Hazır</span>
+              ) : (
+                <ConnectionDot isConnected={player.isConnected} />
+              )}
             </motion.li>
           ))}
 
@@ -63,10 +73,44 @@ export default function LobbyView({ snapshot, onStartMatch }: LobbyViewProps) {
           )}
         </ul>
 
-        <p className="mt-4 rounded-lg border border-night-700 bg-night-950/60 px-3 py-2 text-xs text-cream-300">
-          {FORMAT_LABELS[snapshot.bestOf] ?? `${snapshot.bestOf} el üzerinden`}
-        </p>
+        <div className="mt-4 space-y-1.5 rounded-lg border border-night-700 bg-night-950/60 px-3 py-2 text-xs text-cream-300">
+          <p>{FORMAT_LABELS[snapshot.bestOf] ?? `${snapshot.bestOf} el üzerinden`}</p>
+          <p className="flex items-center gap-1.5">
+            <Timer size={13} className="text-gold-400" aria-hidden="true" />
+            {snapshot.turnTimeLimitSeconds
+              ? `Hamle süresi: ${snapshot.turnTimeLimitSeconds} sn — süre dolunca sunucu otomatik oynar`
+              : 'Hamle süresi: süresiz'}
+          </p>
+        </div>
       </section>
+
+      {!bothPlayersPresent && isHost && onPlayBot && (
+        <section
+          aria-label="Beklerken yapay zekâya karşı oyna"
+          className="rounded-2xl border border-gold-500/20 bg-night-800 p-4"
+        >
+          <p className="mb-2.5 flex items-center gap-1.5 text-sm font-semibold text-cream-100">
+            <Bot size={16} className="text-gold-400" aria-hidden="true" />
+            Beklemek istemiyor musun? Yapay zekâya karşı oyna
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => onPlayBot('Easy')}
+              className="min-h-11 rounded-xl border border-night-600 bg-night-700 px-3 py-2.5 text-sm font-semibold text-cream-100 hover:bg-night-600"
+            >
+              Kolay
+            </button>
+            <button
+              type="button"
+              onClick={() => onPlayBot('Master')}
+              className="min-h-11 rounded-xl border border-gold-500/40 bg-night-700 px-3 py-2.5 text-sm font-semibold text-gold-400 hover:bg-night-600"
+            >
+              Usta
+            </button>
+          </div>
+        </section>
+      )}
 
       {bothPlayersPresent &&
         (isHost ? (
@@ -77,13 +121,14 @@ export default function LobbyView({ snapshot, onStartMatch }: LobbyViewProps) {
             onClick={onStartMatch}
             className="min-h-12 w-full rounded-xl bg-gradient-to-r from-bordo-600 to-bordo-700 px-4 py-3.5 text-lg font-bold text-cream-50 shadow-lg ring-1 ring-gold-500/30 transition-transform hover:scale-[1.01]"
           >
-            Oyunu Başlat
+            {hasBot ? 'Bota Karşı Başlat' : 'Oyunu Başlat'}
           </motion.button>
         ) : (
           <p
-            className="rounded-xl border border-night-600 bg-night-800 px-4 py-3.5 text-center text-sm text-cream-300"
+            className="flex items-center justify-center gap-2 rounded-xl border border-night-600 bg-night-800 px-4 py-3.5 text-center text-sm text-cream-300"
             role="status"
           >
+            {spectator && <Eye size={15} className="text-gold-400" aria-hidden="true" />}
             Oda sahibinin oyunu başlatması bekleniyor…
           </p>
         ))}

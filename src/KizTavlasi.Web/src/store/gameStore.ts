@@ -30,7 +30,10 @@ interface GameStoreState {
   lastMatchEnded: MatchEndedDto | null;
   reactions: ReactionEvent[];
   history: string[];
+  /** Odayı canlı izleyen kişi sayısı (sunucu bellek içi sayar). */
+  spectatorCount: number;
 
+  setSpectatorCount: (count: number) => void;
   setMyPlayerId: (id: string | null) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   applySnapshot: (snapshot: RoomSnapshotDto) => void;
@@ -64,7 +67,9 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   lastMatchEnded: null,
   reactions: [],
   history: [],
+  spectatorCount: 0,
 
+  setSpectatorCount: (count) => set({ spectatorCount: Math.max(0, count) }),
   setMyPlayerId: (id) => set({ myPlayerId: id }),
   setConnectionStatus: (status) => set({ connectionStatus: status }),
 
@@ -131,5 +136,6 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       lastMatchEnded: null,
       reactions: [],
       history: [],
+      spectatorCount: 0,
     }),
 }));

@@ -38,3 +38,15 @@
 
 - JWT, signing key, session token, connection string ve hassas headerlar asla log'lanmaz.
 - Structured log alanları: CorrelationId, RoomId, RoomCode, PlayerId, MatchId, RoundId, CommandId, StateVersion.
+
+## Bot ve İzleyici Oturumları
+
+- **Bot** oyuncusu için hiçbir zaman token üretilmez. `SessionTokenHash` 32 baytlık kriptografik rastgele
+  değerdir; hiçbir `jti`'nin hash'i ile eşleşemez, dolayısıyla kimse bot adına Hub'a bağlanamaz.
+  Bot hamleleri sunucu içinde `TurnAutomationRunner` → `GameService` yoluyla, istemci komutlarıyla aynı
+  sıra / state version / idempotency doğrulamalarından geçerek uygulanır.
+- **Otomatik eylem CommandId**'si `(roundId, stateVersion)`'dan SHA-256 ile türetilir; aynı an için iki çalıştırma
+  (zamanlayıcı + tarama, çoklu instance) ikinci kez uygulanamaz.
+- **İzleyici** token'ı `access=spectator` claim'i taşır (`role` kullanılmaz: JwtBearer onu `ClaimTypes.Role`'e eşler)
+  ve oyuncu kimliği içermez. `PlayerSessionResolver.Resolve` izleyici token'ını `SPECTATOR_READ_ONLY` ile reddeder.
+  İzleme ucu `room-join` hız sınırına tabidir.

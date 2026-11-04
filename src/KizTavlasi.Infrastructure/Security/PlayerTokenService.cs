@@ -15,6 +15,10 @@ public static class GameClaimTypes
     public const string RoomCode = "roomCode";
     public const string Seat = "seat";
     public const string SessionId = "sessionId";
+
+    /// <summary>Salt okunur izleyici token'larında "spectator" değerini taşır ("role" değil: JwtBearer onu ClaimTypes.Role'e eşler).</summary>
+    public const string Role = "access";
+    public const string SpectatorRole = "spectator";
 }
 
 public sealed class PlayerTokenService : IPlayerTokenService
@@ -58,6 +62,29 @@ public sealed class PlayerTokenService : IPlayerTokenService
 
         var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
         return new PlayerTokenResult(tokenString, HashTokenId(jti), sessionId, expires);
+    }
+
+    public string CreateSpectatorToken(Guid roomId, string roomCode)
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Jti, Guid.CreateVersion7().ToString("N")),
+            new(GameClaimTypes.Role, GameClaimTypes.SpectatorRole),
+            new(GameClaimTypes.RoomId, roomId.ToString()),
+            new(GameClaimTypes.RoomCode, roomCode)
+        };
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey));
+        var token = new JwtSecurityToken(
+            issuer: _options.Issuer,
+            audience: _options.Audience,
+            claims: claims,
+            notBefore: now,
+            expires: now.AddHours(_options.ExpirationHours),
+            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
     public string HashTokenId(string jti)

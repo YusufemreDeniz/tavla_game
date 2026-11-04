@@ -29,6 +29,7 @@ public sealed class GameExceptionHandler : IExceptionHandler
         DomainErrorCodes.PlayerNotInRoom => StatusCodes.Status403Forbidden,
         DomainErrorCodes.NotHost => StatusCodes.Status403Forbidden,
         DomainErrorCodes.NotYourTurn => StatusCodes.Status403Forbidden,
+        DomainErrorCodes.SpectatorReadOnly => StatusCodes.Status403Forbidden,
         _ => StatusCodes.Status400BadRequest
     };
 

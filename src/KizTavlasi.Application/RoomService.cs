@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Security.Cryptography;
 using System.Text.Json;
 using KizTavlasi.Application.Abstractions;
 using KizTavlasi.Application.Dtos;
@@ -49,10 +50,36 @@ public sealed class RoomService
         _logger = logger;
     }
 
-    public async Task<CreateRoomResult> CreateRoomAsync(CreateRoomRequest request, CancellationToken ct = default)
+    public Task<CreateRoomResult> CreateRoomAsync(CreateRoomRequest request, CancellationToken ct = default) =>
+        CreateRoomCoreAsync(request.DisplayName, request.BestOf, request.TurnTimeLimitSeconds, botDifficulty: null, ct);
+
+    /// <summary>
+    /// Yapay zekâya karşı oda: misafir koltuğuna sunucu tarafında oynayan bir bot oturur.
+    /// Bot için hiçbir zaman token üretilmez; oturum hash'i tahmin edilemez rastgele bir değerdir.
+    /// </summary>
+    public Task<CreateRoomResult> CreateBotRoomAsync(CreateBotRoomRequest request, CancellationToken ct = default)
     {
-        var displayName = DisplayNameSanitizer.Sanitize(request.DisplayName);
-        GameEngine.RequiredWinsFor(request.BestOf);
+        if (!CreateBotRoomRequestValidator.TryParseDifficulty(request.Difficulty, out var difficulty))
+        {
+            throw new GameDomainException(DomainErrorCodes.InvalidCommand, "Geçersiz zorluk seviyesi.");
+        }
+        return CreateRoomCoreAsync(request.DisplayName, request.BestOf, request.TurnTimeLimitSeconds, difficulty, ct);
+    }
+
+    private async Task<CreateRoomResult> CreateRoomCoreAsync(
+        string rawDisplayName,
+        int bestOf,
+        int? turnTimeLimitSeconds,
+        BotDifficulty? botDifficulty,
+        CancellationToken ct)
+    {
+        var displayName = DisplayNameSanitizer.Sanitize(rawDisplayName);
+        GameEngine.RequiredWinsFor(bestOf);
+        var timeLimit = turnTimeLimitSeconds is > 0 ? turnTimeLimitSeconds : null;
+        if (timeLimit is not null && !GameConstants.SupportedTurnTimeLimits.Contains(timeLimit.Value))
+        {
+            throw new GameDomainException(DomainErrorCodes.InvalidCommand, "Geçersiz hamle süresi.");
+        }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
@@ -67,8 +94,9 @@ public sealed class RoomService
             {
                 Id = roomId,
                 Code = code,
-                Status = RoomStatus.Waiting,
-                BestOf = request.BestOf,
+                Status = botDifficulty is null ? RoomStatus.Waiting : RoomStatus.InLobby,
+                BestOf = bestOf,
+                TurnTimeLimitSeconds = timeLimit,
                 HostPlayerId = playerId,
                 CreatedAtUtc = now,
                 ExpiresAtUtc = now.AddHours(_options.RoomExpirationHours),
@@ -89,8 +117,25 @@ public sealed class RoomService
             };
 
             room.Players.Add(player);
+            if (botDifficulty is BotDifficulty difficulty)
+            {
+                room.Players.Add(new Player
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoomId = roomId,
+                    DisplayName = GameConstants.BotDisplayName(difficulty),
+                    Seat = GameConstants.GuestSeat,
+                    SessionId = Guid.CreateVersion7(),
+                    SessionTokenHash = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
+                    IsConnected = true,
+                    JoinedAtUtc = now,
+                    LastSeenAtUtc = now,
+                    BotDifficulty = difficulty
+                });
+            }
             _db.GameRooms.Add(room);
-            AddEvent(room.Id, null, null, 1, "RoomCreated", new { room.Code, room.BestOf, playerId }, now);
+            AddEvent(room.Id, null, null, 1, "RoomCreated",
+                new { room.Code, room.BestOf, playerId, room.TurnTimeLimitSeconds, BotDifficulty = botDifficulty?.ToString() }, now);
 
             try
             {
@@ -200,6 +245,37 @@ public sealed class RoomService
         return SnapshotMapper.ToSnapshot(room, match, round, now);
     }
 
+    /// <summary>
+    /// İzleyici girişi: salt okunur izleyici token'ı üretir. İzleyiciler veritabanına yazılmaz;
+    /// token yalnızca bu odanın snapshot'larını almaya yetkilidir, komut gönderemez.
+    /// </summary>
+    public async Task<WatchRoomResult> WatchRoomAsync(string roomCode, CancellationToken ct = default)
+    {
+        var normalizedCode = NormalizeCode(roomCode);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        var room = await _db.GameRooms
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Code == normalizedCode, ct)
+            ?? throw new GameDomainException(DomainErrorCodes.RoomNotFound, "Oda bulunamadı.");
+
+        EnsureNotExpired(room, now);
+
+        var token = _tokenService.CreateSpectatorToken(room.Id, room.Code);
+        var snapshot = await GetSpectatorStateAsync(room.Id, ct);
+        _logger.LogInformation("İzleyici token'ı üretildi. RoomCode: {RoomCode}", room.Code);
+        return new WatchRoomResult(room.Code, token, snapshot);
+    }
+
+    /// <summary>İzleyici için authoritative snapshot (oyuncu oturumu gerektirmez).</summary>
+    public async Task<RoomSnapshotDto> GetSpectatorStateAsync(Guid roomId, CancellationToken ct = default)
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var (room, match, round) = await LoadRoomGraphAsync(roomId, tracking: false, ct);
+        EnsureNotExpired(room, now);
+        return SnapshotMapper.ToSnapshot(room, match, round, now);
+    }
+
     public async Task LeaveRoomAsync(PlayerSession session, CancellationToken ct = default)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -216,10 +292,27 @@ public sealed class RoomService
 
             MatchEndedDto? forfeitMatchEnded = null;
 
-            if (room.Players.Count == 0)
+            if (room.Players.Count == 0 || room.Players.All(p => p.IsBot))
             {
+                // Yalnızca bot kaldıysa oda kapanır; bota hükmen galibiyet verilmez.
                 room.Status = RoomStatus.Abandoned;
                 room.CompletedAtUtc = now;
+                if (match is not null && match.Status != MatchStatus.Completed)
+                {
+                    match.Status = MatchStatus.Completed;
+                    match.CompletedAtUtc = now;
+                    match.StateVersion = room.StateVersion;
+                }
+                if (round is not null && round.Status == RoundStatus.InProgress)
+                {
+                    round.Status = RoundStatus.Completed;
+                    round.CurrentPlayerId = null;
+                    round.PendingDice = string.Empty;
+                    round.PendingBonusPicks = 0;
+                    round.TurnDeadlineUtc = null;
+                    round.CompletedAtUtc = now;
+                    round.StateVersion = room.StateVersion;
+                }
             }
             else if (room.Status is RoomStatus.Playing)
             {
@@ -249,6 +342,7 @@ public sealed class RoomService
                     round.CurrentPlayerId = null;
                     round.PendingDice = string.Empty;
                     round.PendingBonusPicks = 0;
+                    round.TurnDeadlineUtc = null;
                     round.CompletedAtUtc = now;
                     round.StateVersion = room.StateVersion;
                 }
@@ -275,7 +369,7 @@ public sealed class RoomService
             _logger.LogInformation("Oyuncu odadan ayrıldı. RoomCode: {RoomCode}, PlayerId: {PlayerId}", room.Code, session.PlayerId);
 
             RoomSnapshotDto? snapshot = null;
-            if (room.Players.Count > 0)
+            if (room.Players.Any(p => !p.IsBot))
             {
                 // Ayrılan oyuncunun tahta durumunu referans hatası olmadan map'leyebilmek için
                 // tamamlanan round bilgisini güvenli şekilde snapshot'a dönüştür.
@@ -386,8 +480,12 @@ public sealed class RoomService
         }
     }
 
+    internal Task<(GameRoom Room, Match? Match, Round? Round)> LoadRoomGraphAsync(
+        PlayerSession session, bool tracking, CancellationToken ct) =>
+        LoadRoomGraphAsync(session.RoomId, tracking, ct);
+
     internal async Task<(GameRoom Room, Match? Match, Round? Round)> LoadRoomGraphAsync(
-        PlayerSession session, bool tracking, CancellationToken ct)
+        Guid roomId, bool tracking, CancellationToken ct)
     {
         var query = _db.GameRooms.AsQueryable();
         if (!tracking)
@@ -397,7 +495,7 @@ public sealed class RoomService
 
         var room = await query
             .Include(r => r.Players)
-            .FirstOrDefaultAsync(r => r.Id == session.RoomId, ct)
+            .FirstOrDefaultAsync(r => r.Id == roomId, ct)
             ?? throw new GameDomainException(DomainErrorCodes.RoomNotFound, "Oda bulunamadı.");
 
         Match? match = null;

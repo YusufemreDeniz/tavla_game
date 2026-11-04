@@ -94,6 +94,22 @@ public sealed class RoomCleanupService : BackgroundService
             bool IsPlayerTimedOut(Player p) =>
                 !p.IsConnected && (p.DisconnectedAtUtc ?? p.LastSeenAtUtc) <= graceCutoff;
 
+            if (room.Players.Any(p => p.IsBot))
+            {
+                // Bot odası: bot her zaman "bağlı"dır; insan oyuncu dönmezse bota galibiyet
+                // verilmez, oda sahipsiz olarak kapanır.
+                var humans = room.Players.Where(p => !p.IsBot).ToList();
+                if (humans.All(IsPlayerTimedOut) || (room.ExpiresAtUtc < now && humans.All(p => !p.IsConnected)))
+                {
+                    await TerminateMatchAndRoundAsync(db, room, winner: null, now, ct);
+                    room.Status = RoomStatus.Abandoned;
+                    room.CompletedAtUtc = now;
+                    room.StateVersion++;
+                    abandonedPlaying++;
+                }
+                continue;
+            }
+
             var connectedPlayers = room.Players.Where(p => p.IsConnected).ToList();
             var timedOutPlayers = room.Players.Where(IsPlayerTimedOut).ToList();
 
@@ -216,6 +232,7 @@ public sealed class RoomCleanupService : BackgroundService
             round.CurrentPlayerId = null;
             round.PendingDice = string.Empty;
             round.PendingBonusPicks = 0;
+            round.TurnDeadlineUtc = null;
             round.CompletedAtUtc = now;
             round.StateVersion = room.StateVersion;
         }

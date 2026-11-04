@@ -5,11 +5,37 @@ using KizTavlasi.Infrastructure.Security;
 
 namespace KizTavlasi.Api;
 
+/// <summary>Salt okunur izleyici oturumu (oyuncu kaydı yoktur).</summary>
+public sealed record SpectatorSession(Guid RoomId, string RoomCode);
+
 public static class PlayerSessionResolver
 {
+    public static bool IsSpectator(ClaimsPrincipal principal) =>
+        principal.FindFirstValue(GameClaimTypes.Role) == GameClaimTypes.SpectatorRole;
+
+    /// <summary>İzleyici token'ını çözer; oyuncu kimliği taşıyan token'lar izleyici sayılmaz.</summary>
+    public static SpectatorSession ResolveSpectator(ClaimsPrincipal principal)
+    {
+        var roomId = principal.FindFirstValue(GameClaimTypes.RoomId);
+        var roomCode = principal.FindFirstValue(GameClaimTypes.RoomCode);
+        if (!IsSpectator(principal)
+            || principal.FindFirstValue(GameClaimTypes.PlayerId) is not null
+            || roomCode is null
+            || !Guid.TryParse(roomId, out var roomGuid))
+        {
+            throw new GameDomainException(DomainErrorCodes.InvalidSession, "İzleyici oturumu geçersiz.");
+        }
+        return new SpectatorSession(roomGuid, roomCode);
+    }
+
     /// <summary>JWT claim'lerinden oyuncu oturumunu çözer; eksik claim varsa oturumu reddeder.</summary>
     public static PlayerSession Resolve(ClaimsPrincipal principal)
     {
+        if (IsSpectator(principal))
+        {
+            throw new GameDomainException(DomainErrorCodes.SpectatorReadOnly, "İzleyiciler hamle yapamaz; maçı yalnızca izleyebilir.");
+        }
+
         var playerId = principal.FindFirstValue(GameClaimTypes.PlayerId);
         var roomId = principal.FindFirstValue(GameClaimTypes.RoomId);
         var roomCode = principal.FindFirstValue(GameClaimTypes.RoomCode);

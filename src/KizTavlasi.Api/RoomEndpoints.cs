@@ -24,6 +24,24 @@ public static class RoomEndpoints
             return Results.Ok(result);
         }).RequireRateLimiting("room-create");
 
+        rooms.MapPost("/bot", async (
+            CreateBotRoomRequest request,
+            IValidator<CreateBotRoomRequest> validator,
+            RoomService roomService,
+            CancellationToken ct) =>
+        {
+            await ValidateAsync(validator, request, ct);
+            var result = await roomService.CreateBotRoomAsync(request, ct);
+            return Results.Ok(result);
+        }).RequireRateLimiting("room-create");
+
+        // Dolu odayı salt okunur izleme: oyuncu koltuğu açmaz, yalnızca izleyici token'ı verir.
+        rooms.MapPost("/{roomCode}/watch", async (string roomCode, RoomService roomService, CancellationToken ct) =>
+        {
+            var result = await roomService.WatchRoomAsync(roomCode, ct);
+            return Results.Ok(result);
+        }).RequireRateLimiting("room-join");
+
         rooms.MapPost("/{roomCode}/join", async (
             string roomCode,
             JoinRoomRequest request,
@@ -90,7 +108,8 @@ public static class RoomEndpoints
             var config = new PublicConfigDto(
                 branding.Value.ProductName,
                 GameConstants.SupportedBestOf,
-                GameConstants.AllowedReactions);
+                GameConstants.AllowedReactions,
+                GameConstants.SupportedTurnTimeLimits);
             return Results.Ok(config);
         }).WithTags("Config");
     }

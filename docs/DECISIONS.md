@@ -31,6 +31,13 @@
 | 27 | Çift zar = 2×zar hamle HER İKİ aşamada (5-5 → 10 indirme); ilk hamle çift atılan haneden zorunlu, oynanamıyorsa el boşa | 3. iterasyon kullanıcı kuralı. |
 | 28 | Tahta görünümü gerçek tavla masası: ahşap damar dokulu çerçeve, menteşeli omurga, üçgen haneler, tornalanmış pullar, yan toplama rayı | Kullanıcının fotoğraf referansı. |
 
+| 29 | Bot, misafir koltuğunda gerçek bir `Player` kaydıdır (`BotDifficulty`); token'ı yoktur | Mevcut maç/tur/skor akışı değişmeden çalışır; bot ayrı kural kodu gerektirmez. |
+| 30 | Bot ve hamle süresi tek bir otomasyon mekanizmasını paylaşır (`Round.TurnDeadlineUtc` + `TurnAutomationService`) | Durum DB'de; yeniden başlatma ve çoklu instance güvenli; istemci kural/zaman otoritesi değildir. |
+| 31 | Süre dolunca insan oyuncu için Kolay strateji (rastgele geçerli hamle) oynanır; süre her hamlede yeniden başlar | "Rastgele geçerli hamle" isteği; çift zar zincirinde oyuncu cezalandırılmaz. |
+| 32 | İzleyiciler DB'ye yazılmaz; salt okunur JWT (`access=spectator`) + bellek içi sayaç | Oda koltuk modeli değişmez; izleyici komut gönderemez. Çoklu instance'ta sayaç backplane'e taşınmalıdır. |
+| 33 | QR kod harici kütüphanesiz (`src/lib/qr.ts`, byte modu, M seviyesi, sürüm 1–10); testte bağımsız çözücü (`jsqr`, yalnızca devDependency) ile doğrulanır | Paket boyutu; doğruluk bağımsız referansla kanıtlanır. |
+| 34 | Bot odasından insan ayrılırsa veya grace süresini aşarsa oda `Abandoned` olur; bota hükmen galibiyet verilmez | Anlamsız skor ve MatchEnded yayını önlenir. |
+
 ## Varsayımlar
 
 - Geliştirme makinesinde Docker yok; SQL LocalDB ile geliştirme yapılır, Docker Compose üretim/CI içindir.

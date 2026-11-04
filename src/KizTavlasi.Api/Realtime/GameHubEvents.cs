@@ -22,4 +22,5 @@ public static class GameHubEvents
     public const string RematchDeclined = "RematchDeclined";
     public const string ReactionReceived = "ReactionReceived";
     public const string ServerError = "ServerError";
+    public const string SpectatorCountChanged = "SpectatorCountChanged";
 }

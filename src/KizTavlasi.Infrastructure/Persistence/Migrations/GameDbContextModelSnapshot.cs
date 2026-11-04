@@ -153,6 +153,9 @@ namespace KizTavlasi.Infrastructure.Persistence.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
+                    b.Property<int?>("TurnTimeLimitSeconds")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Code")
@@ -165,6 +168,8 @@ namespace KizTavlasi.Infrastructure.Persistence.Migrations
                     b.ToTable("GameRooms", null, t =>
                         {
                             t.HasCheckConstraint("CK_GameRooms_BestOf", "[BestOf] IN (1, 3, 5)");
+
+                            t.HasCheckConstraint("CK_GameRooms_TurnTimeLimitSeconds", "[TurnTimeLimitSeconds] IS NULL OR [TurnTimeLimitSeconds] IN (15, 30)");
                         });
                 });
 
@@ -231,6 +236,9 @@ namespace KizTavlasi.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int?>("BotDifficulty")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("DisconnectedAtUtc")
                         .HasColumnType("datetime2");
 
@@ -269,6 +277,8 @@ namespace KizTavlasi.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Players", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Players_BotDifficulty", "[BotDifficulty] IS NULL OR [BotDifficulty] IN (1, 2)");
+
                             t.HasCheckConstraint("CK_Players_DisplayName", "LEN([DisplayName]) >= 2");
 
                             t.HasCheckConstraint("CK_Players_Seat", "[Seat] IN (1, 2)");
@@ -377,6 +387,9 @@ namespace KizTavlasi.Infrastructure.Persistence.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("TurnDeadlineUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("TurnNumber")
                         .HasColumnType("int");
 
@@ -384,6 +397,9 @@ namespace KizTavlasi.Infrastructure.Persistence.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TurnDeadlineUtc")
+                        .HasFilter("[TurnDeadlineUtc] IS NOT NULL");
 
                     b.HasIndex("MatchId", "RoundNumber")
                         .IsUnique();
