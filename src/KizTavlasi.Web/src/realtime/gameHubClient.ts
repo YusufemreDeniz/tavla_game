@@ -5,6 +5,7 @@ import {
   LogLevel,
 } from '@microsoft/signalr';
 import { useGameStore } from '../store/gameStore';
+import { newCommandId } from '../lib/uuid';
 import type {
   DiceRollResultDto,
   MatchEndedDto,
@@ -186,12 +187,12 @@ export class GameHubClient {
   }
 
   startMatch(): Promise<void> {
-    return this.ensureConnected().invoke('StartMatch', { commandId: crypto.randomUUID() });
+    return this.ensureConnected().invoke('StartMatch', { commandId: newCommandId() });
   }
 
   rollDice(expectedStateVersion: number): Promise<void> {
     return this.ensureConnected().invoke('RollDice', {
-      commandId: crypto.randomUUID(),
+      commandId: newCommandId(),
       expectedStateVersion,
     });
   }
@@ -200,7 +201,7 @@ export class GameHubClient {
     return this.ensureConnected().invoke('PlayMove', {
       pointNumber,
       expectedStateVersion,
-      commandId: crypto.randomUUID(),
+      commandId: newCommandId(),
     });
   }
 
