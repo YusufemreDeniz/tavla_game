@@ -65,7 +65,13 @@ test.describe('Yapay zekâya karşı oyun ve izleyici', () => {
       await playUntilMatchEnds(page);
 
       await expect(page.getByRole('dialog', { name: 'Maç sonucu' })).toBeVisible();
+      // Sunucu tarafı analitik: şans vs. strateji tablosu ve kırılma anı.
+      const statsPanel = page.getByRole('region', { name: 'Maç istatistikleri' });
+      await expect(statsPanel).toBeVisible({ timeout: 10_000 });
+      await expect(statsPanel.getByRole('columnheader', { name: 'Çırak Bot' })).toBeVisible();
+      await expect(statsPanel.getByLabel('Maçın kırılma anı')).toBeVisible();
       await expect(spectatorPage.getByRole('dialog', { name: 'Maç sonucu' })).toBeVisible({ timeout: 15_000 });
+      await expect(spectatorPage.getByRole('region', { name: 'Maç istatistikleri' })).toBeVisible({ timeout: 10_000 });
       await expect(spectatorPage.getByRole('button', { name: 'Rövanş İste' })).toHaveCount(0);
 
       // Bot rövanşı kendiliğinden kabul eder.

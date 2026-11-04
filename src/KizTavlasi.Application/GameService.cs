@@ -63,14 +63,6 @@ public sealed class GameService
         int StartingSeat,
         List<StartingRollAttemptDto> Attempts);
 
-    private sealed record MovePlayedEventPayload(
-        Guid PlayerId,
-        Guid? CommandId,
-        int PointNumber,
-        string Action,
-        string Remaining,
-        int PendingBonusPicks);
-
     public async Task<StartMatchResult> StartMatchAsync(PlayerSession session, Guid commandId, CancellationToken ct = default)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -455,6 +447,7 @@ public sealed class GameService
             player.LastSeenAtUtc = now;
             var playerState = round.PlayerStates.First(s => s.PlayerId == player.Id);
             var board = playerState.ToBoard();
+            var wasCollecting = board.IsCollecting;
 
             var step = _engine.PlayMove(board, pointNumber);
             playerState.ApplyBoard(board);
@@ -516,7 +509,17 @@ public sealed class GameService
                 round.Id,
                 room.StateVersion,
                 "MovePlayed",
-                new MovePlayedEventPayload(player.Id, commandId, pointNumber, step.Action.ToString(), round.PendingDice, round.PendingBonusPicks),
+                new MovePlayedEventPayload(
+                    player.Id,
+                    commandId,
+                    pointNumber,
+                    step.Action.ToString(),
+                    round.PendingDice,
+                    round.PendingBonusPicks,
+                    WastedDiceCount: wastedDice.Count,
+                    BringDownCompleted: !wasCollecting && board.IsCollecting,
+                    // Zar atışı TurnNumber'ı artırır; hamle, bir önceki tur numarasındaki atışa aittir.
+                    RollTurnNumber: Math.Max(0, round.TurnNumber - 1)),
                 now);
 
             await _db.SaveChangesAsync(innerCt);
@@ -613,6 +616,10 @@ public sealed class GameService
         var progress = _engine.EvaluateRoundEnd(winner.Seat, isMars, match.Player1Score, match.Player2Score, match.RequiredWins);
         match.Player1Score = progress.Player1Score;
         match.Player2Score = progress.Player2Score;
+
+        // Maç analitiği için el sonucu (mars bilgisi round tablosunda tutulmaz).
+        _roomService.AddEvent(room.Id, match.Id, round.Id, room.StateVersion, GameEventTypes.RoundCompleted,
+            new RoundCompletedEventPayload(winner.Id, round.RoundNumber, isMars, progress.PointsAwarded), now);
 
         MatchEndedDto? matchEnded = null;
 

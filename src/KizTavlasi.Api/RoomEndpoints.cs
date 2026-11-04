@@ -68,6 +68,29 @@ public static class RoomEndpoints
             return Results.Ok(state);
         }).RequireAuthorization();
 
+        // Maç analitiği: oyuncular ve izleyiciler okuyabilir (salt okunur).
+        rooms.MapGet("/{roomCode}/stats", async (string roomCode, HttpContext context, RoomService roomService, MatchStatsService statsService, CancellationToken ct) =>
+        {
+            Guid roomId;
+            if (PlayerSessionResolver.IsSpectator(context.User))
+            {
+                var spectator = PlayerSessionResolver.ResolveSpectator(context.User);
+                if (!string.Equals(spectator.RoomCode, roomCode.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new GameDomainException(DomainErrorCodes.PlayerNotInRoom, "Bu odaya erişim yetkiniz yok.");
+                }
+                roomId = spectator.RoomId;
+            }
+            else
+            {
+                var session = ResolveSessionForRoom(context, roomCode);
+                await roomService.ValidateSessionAsync(session, ct);
+                roomId = session.RoomId;
+            }
+            var stats = await statsService.GetCurrentMatchStatsAsync(roomId, ct);
+            return Results.Ok(stats);
+        }).RequireAuthorization();
+
         rooms.MapPost("/{roomCode}/leave", async (string roomCode, HttpContext context, RoomService roomService, CancellationToken ct) =>
         {
             var session = ResolveSessionForRoom(context, roomCode);

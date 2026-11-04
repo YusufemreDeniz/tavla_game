@@ -43,3 +43,25 @@ Bu plan, `docs/QUALITY_AUDIT.md` içindeki doğrulanmış bulguları güvenli, t
 ## Aşama 6 — Production Readiness & Final QA ✅ Tamamlandı
 - Frontend production paketi `src/KizTavlasi.Api/wwwroot` altına derlendi.
 - Tüm backend (Domain: 49, Application: 32, Integration: 19) ve frontend (Vitest: 21, TypeScript, Oxlint, Playwright E2E: 3) testleri koşularak sıfır hata ile doğrulandı.
+
+---
+
+# Next-Level Roadmap (Game Feel · Bot & Rekabet · Analitik)
+
+`docs/GAME_RULES.md` değiştirilmedi; tüm kural ve zaman otoritesi sunucuda kaldı.
+
+## Faz 1 — Game Feel ✅ (`743b2bb`)
+- FLIP pul yörüngesi (indirme: arka → ön sıra, toplama: hane → kenar rayı); iki authoritative snapshot farkından çıkarılır.
+- Zar düşüş/sekme animasyonu, çift zarda altın halka + parıltı ve hafif masa sarsıntısı.
+- Hayalet pul önizlemesi (fare üzerine gelme / klavye odağı / mobilde basılı tutma; basılı tutup bırakmak hamle oynamaz).
+- Web Audio yeniden tasarımı: filtrelenmiş gürültü + perdeli gövde rezonansı (zar sekmesi, tok pul, sıcak akor, Mars fanfarı).
+- `fastMode` ve `prefers-reduced-motion` tam uyumu; RoomPage lazy-load + vendor parçaları (en büyük parça 231 kB).
+
+## Faz 2 — Bot & Rekabetçi Özellikler ✅ (`97d700e`)
+- `BotStrategy` (Kolay/Usta) + `TurnAutomationService` (bellek içi zamanlayıcı + DB taraması), deterministik CommandId.
+- Opsiyonel hamle süresi (Süresiz/30/15 sn), son 5 sn görsel/işitsel uyarı, süre dolunca sunucu otomatik oynar.
+- Salt okunur izleyici modu, izleyici sayacı; bağımlılıksız SVG QR kod ve iyileştirilmiş Web Share.
+
+## Faz 3 — Analitik & Performans ✅
+- `MatchStatsService` + `GET /api/rooms/{code}/stats`; maç sonu ekranında "Şans vs. Strateji" tablosu ve "Maçın Kırılma Anı".
+- Olay günlüğü yeni analitik sinyallerini kaydeder (geriye dönük uyumlu varsayılanlarla).

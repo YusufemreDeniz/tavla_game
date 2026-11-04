@@ -3,6 +3,7 @@ import type {
   BotDifficulty,
   CreateRoomResult,
   JoinRoomResult,
+  MatchStatsDto,
   PublicConfigDto,
   RoomSnapshotDto,
   WatchRoomResult,
@@ -50,6 +51,11 @@ export function getPublicRoomInfo(roomCode: string): Promise<RoomSnapshotDto> {
 
 export function getRoomState(roomCode: string, token: string): Promise<RoomSnapshotDto> {
   return apiRequest(`/api/rooms/${encodeURIComponent(roomCode)}/state`, { token });
+}
+
+/** Güncel (veya yeni biten) maçın sunucu tarafında hesaplanan analitiği; oyuncu veya izleyici token'ı. */
+export function getMatchStats(roomCode: string, token: string): Promise<MatchStatsDto> {
+  return apiRequest(`/api/rooms/${encodeURIComponent(roomCode)}/stats`, { token });
 }
 
 export function leaveRoom(roomCode: string, token: string): Promise<void> {

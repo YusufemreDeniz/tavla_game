@@ -4,7 +4,14 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { BookOpen, DoorOpen, Eye, Volume2, VolumeX, Zap } from 'lucide-react';
 import { z } from 'zod';
-import { createBotRoom, getPublicRoomInfo, joinRoom, leaveRoom, watchRoom } from '../api/rooms';
+import {
+  createBotRoom,
+  getMatchStats,
+  getPublicRoomInfo,
+  joinRoom,
+  leaveRoom,
+  watchRoom,
+} from '../api/rooms';
 import { ApiError } from '../api/client';
 import {
   clearPlayerToken,
@@ -553,6 +560,7 @@ function ConnectedRoom({
           onDeclineRematch={() => invoke((h) => h.declineRematch())}
           onLeave={handleLeave}
           spectator={spectator}
+          loadStats={() => getMatchStats(roomCode, token)}
         />
       )}
 

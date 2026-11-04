@@ -134,6 +134,32 @@ public sealed record MatchEndedDto(
     int Player2Score,
     bool IsMars);
 
+/// <param name="AverageRoll">Atış başına ortalama zar toplamı (iki zarın toplamı).</param>
+/// <param name="WastedDice">Atışta veya hamle sonrasında oynanamadığı için boşa giden zar sayısı.</param>
+/// <param name="LastBringDownTurn">Son oynanan elde indirmeyi tamamladığı kendi zar atışı (tamamlamadıysa null).</param>
+/// <param name="AverageBringDownTurn">İndirmeyi tamamladığı ellerdeki ortalama atış sayısı.</param>
+public sealed record PlayerMatchStatsDto(
+    Guid PlayerId,
+    int Rolls,
+    double AverageRoll,
+    int Doubles,
+    int LongestDoubleStreak,
+    int WastedDice,
+    int? LastBringDownTurn,
+    double? AverageBringDownTurn,
+    int MarsWins,
+    int Points);
+
+/// <param name="Kind">Mars, PhaseShift, DoubleStreak, BigDouble veya FastBringDown.</param>
+public sealed record MatchHighlightDto(string Kind, Guid? PlayerId, int RoundNumber, string Text);
+
+public sealed record MatchStatsDto(
+    Guid MatchId,
+    int RoundsPlayed,
+    int TotalRolls,
+    IReadOnlyList<PlayerMatchStatsDto> Players,
+    MatchHighlightDto? Highlight);
+
 public sealed record StartMatchResult(StartingRollDto StartingRoll, RoomSnapshotDto Snapshot);
 
 public sealed record RollDiceResult(DiceRollResultDto Roll, RoomSnapshotDto Snapshot, bool WasAlreadyProcessed);

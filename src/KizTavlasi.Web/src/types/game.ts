@@ -157,6 +157,36 @@ export interface MatchEndedDto {
   isMars: boolean;
 }
 
+export interface PlayerMatchStatsDto {
+  playerId: string;
+  rolls: number;
+  /** Atış başına ortalama zar toplamı. */
+  averageRoll: number;
+  doubles: number;
+  longestDoubleStreak: number;
+  wastedDice: number;
+  /** Son elde indirmeyi tamamladığı kendi zar atışı. */
+  lastBringDownTurn: number | null;
+  averageBringDownTurn: number | null;
+  marsWins: number;
+  points: number;
+}
+
+export interface MatchHighlightDto {
+  kind: 'Mars' | 'PhaseShift' | 'DoubleStreak' | 'BigDouble' | 'FastBringDown';
+  playerId: string | null;
+  roundNumber: number;
+  text: string;
+}
+
+export interface MatchStatsDto {
+  matchId: string;
+  roundsPlayed: number;
+  totalRolls: number;
+  players: PlayerMatchStatsDto[];
+  highlight: MatchHighlightDto | null;
+}
+
 export interface PublicConfigDto {
   productName: string;
   supportedBestOf: number[];

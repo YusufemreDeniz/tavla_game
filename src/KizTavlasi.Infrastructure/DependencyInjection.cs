@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<RoomService>();
         services.AddScoped<GameService>();
         services.AddScoped<TurnAutomationRunner>();
+        services.AddScoped<MatchStatsService>();
 
         // Tek örnek: hem zamanlayıcı arayüzü (GameService commit sonrası çağırır) hem arka plan servisi.
         services.AddSingleton<TurnAutomationService>();

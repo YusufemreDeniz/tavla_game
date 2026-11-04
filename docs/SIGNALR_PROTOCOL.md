@@ -94,3 +94,12 @@ olan eventler atılır.
   gecikmesi, süreli odada insan oyuncu için hamle süresinin sonu. İstemci yalnızca geri sayımı gösterir.
 - Otomatik eylemler istemci komutlarıyla aynı olayları üretir (`DiceRollStarted`, `DiceRollResolved`,
   `MovePlayed`, `TurnStarted`, ...); ayrı bir event yoktur. `PlayerDto.isBot` botu işaretler.
+
+## Maç Analitiği (REST)
+
+`GET /api/rooms/{code}/stats` — oyuncu veya izleyici token'ı ile; güncel (veya yeni biten) maç için
+sunucuda hesaplanan `MatchStatsDto` döner: oyuncu başına atış sayısı, ortalama zar toplamı, çift sayısı ve
+en uzun çift serisi, boşa giden zar (atışta + hamle sonrası), indirmenin bittiği atış, mars, puan ve
+"maçın kırılma anı" (`Mars` > `PhaseShift` > `DoubleStreak` > `BigDouble` > `FastBringDown`).
+Kaynak: `DiceRolls` + `GameEvents` (`MovePlayed` payload'ındaki `WastedDiceCount`, `BringDownCompleted`,
+`RollTurnNumber`; `RoundCompleted`). Maç yoksa `MATCH_NOT_ACTIVE` (400).

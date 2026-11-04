@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bot, Eye, Home, RotateCcw, Sparkles, Trophy, WifiOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import type { RoomSnapshotDto } from '../types/game';
+import type { MatchStatsDto, RoomSnapshotDto } from '../types/game';
 import { useGameStore } from '../store/gameStore';
 import { useUiStore } from '../store/uiStore';
 import Die from '../components/Die';
 import DiceTray from '../components/DiceTray';
 import TurnTimer from '../components/TurnTimer';
+import MatchStatsPanel from '../components/MatchStatsPanel';
 import BackgammonBoard, { type PointFlash } from '../components/BackgammonBoard';
 import ConnectionDot from '../components/ConnectionDot';
 import ShareLinkCard from '../components/ShareLinkCard';
@@ -35,6 +36,8 @@ interface GameViewProps {
   onLeave: () => void;
   /** Salt okunur izleyici: tahta 1. koltuğun bakışından gösterilir, komut düğmeleri yoktur. */
   spectator?: boolean;
+  /** Maç sonu analitiği (sunucuda hesaplanır). Verilmezse yalnızca özet gösterilir. */
+  loadStats?: () => Promise<MatchStatsDto>;
 }
 
 export default function GameView({
@@ -47,6 +50,7 @@ export default function GameView({
   onDeclineRematch,
   onLeave,
   spectator = false,
+  loadStats,
 }: GameViewProps) {
   const navigate = useNavigate();
   const myPlayerId = useGameStore((s) => s.myPlayerId);
@@ -604,8 +608,13 @@ export default function GameView({
                 Final skor: {match?.player1Score} - {match?.player2Score}
               </p>
 
+              {/* Maç analitiği: şans vs. strateji ve kırılma anı */}
+              {loadStats && match && (
+                <MatchStatsPanel matchId={match.id} players={players} loadStats={loadStats} />
+              )}
+
               {/* Maç İstatistik Özeti */}
-              <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl border border-night-600 bg-night-900/80 p-3 text-xs">
+              <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl border border-night-600 bg-night-900/80 p-3 text-xs">
                 <div>
                   <span className="block text-[10px] uppercase text-cream-400">Maç No</span>
                   <span className="font-mono text-sm font-bold text-cream-100">#{match?.matchNumber ?? 1}</span>
