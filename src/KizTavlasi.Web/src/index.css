@@ -119,3 +119,78 @@ body {
 .anim-turn-dot {
   animation: turn-dot 1.6s ease-in-out infinite;
 }
+
+/* Hayalet pul (hamle önizlemesi): yavaşça nefes alır. */
+@keyframes ghost-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+
+.anim-ghost {
+  animation: ghost-breathe 1.2s ease-in-out infinite;
+}
+
+/* Uçuş katmanı pulu taşırken hedefteki gerçek pul gizlenir (FLIP). */
+[data-piece][data-landing] {
+  visibility: hidden;
+}
+
+/* Zar masaya sekerek düşer. */
+@keyframes die-drop {
+  0% {
+    transform: translate3d(var(--drop-x, -18px), -34px, 0) rotate(var(--drop-rot, -140deg)) scale(0.8);
+    opacity: 0;
+  }
+  45% {
+    transform: translate3d(0, 4px, 0) rotate(12deg) scale(1.04);
+    opacity: 1;
+  }
+  65% {
+    transform: translate3d(0, -7px, 0) rotate(-5deg) scale(1);
+  }
+  82% {
+    transform: translate3d(0, 1px, 0) rotate(2deg) scale(1);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+}
+
+.anim-die-drop {
+  animation: die-drop var(--drop-duration, 560ms) cubic-bezier(0.25, 0.8, 0.3, 1) both;
+}
+
+/* Çift zar altın parıltısı: zarın arkasında genişleyen halka. */
+@keyframes double-burst {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+.anim-double-burst {
+  animation: double-burst 0.9s ease-out 0.3s both;
+}
+
+@keyframes double-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 6px rgba(212, 175, 55, 0.55)) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.55));
+  }
+  50% {
+    filter: drop-shadow(0 0 14px rgba(240, 205, 90, 0.95)) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.55));
+  }
+}
+
+.anim-double-glow {
+  animation: double-glow 1.4s ease-in-out 0.45s infinite;
+}

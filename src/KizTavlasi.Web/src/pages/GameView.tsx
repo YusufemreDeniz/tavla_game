@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Home, RotateCcw, Sparkles, Trophy, WifiOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -6,6 +6,7 @@ import type { RoomSnapshotDto } from '../types/game';
 import { useGameStore } from '../store/gameStore';
 import { useUiStore } from '../store/uiStore';
 import Die from '../components/Die';
+import DiceTray from '../components/DiceTray';
 import BackgammonBoard, { type PointFlash } from '../components/BackgammonBoard';
 import ConnectionDot from '../components/ConnectionDot';
 import ShareLinkCard from '../components/ShareLinkCard';
@@ -16,9 +17,11 @@ import {
   playDiceSound,
   playDoubleSound,
   playLoseSound,
+  playMarsFanfare,
   playPieceSound,
   playWinSound,
 } from '../lib/sound';
+import { flightDuration, useMotionPrefs } from '../lib/motion';
 
 interface GameViewProps {
   snapshot: RoomSnapshotDto;
@@ -55,20 +58,39 @@ export default function GameView({
   const history = useGameStore((s) => s.history);
   const addHistory = useGameStore((s) => s.addHistory);
   const soundEnabled = useUiStore((s) => s.soundEnabled);
-  const fastMode = useUiStore((s) => s.fastMode);
+  const { fast: fastMode, reduced: reducedMotion } = useMotionPrefs();
 
   const [displayedDice, setDisplayedDice] = useState<[number, number] | null>(null);
   const [rollInProgress, setRollInProgress] = useState(false);
   const [moveInProgressVersion, setMoveInProgressVersion] = useState<number | null>(null);
   const [moveFlash, setMoveFlash] = useState<(PointFlash & { playerId: string }) | null>(null);
+  const [rollToken, setRollToken] = useState(0);
+  const [shakeToken, setShakeToken] = useState<number | null>(null);
   const rollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const soundTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   useEffect(() => {
+    const soundTimers = soundTimersRef.current;
     return () => {
       if (rollTimeoutRef.current) {
         clearTimeout(rollTimeoutRef.current);
       }
+      soundTimers.forEach(clearTimeout);
+      soundTimers.clear();
     };
+  }, []);
+
+  /** Sesi animasyonla eşzamanlamak için gecikmeli çalar (pul masaya değdiğinde). */
+  const playLater = useCallback((play: () => void, delayMs: number) => {
+    if (delayMs <= 0) {
+      play();
+      return;
+    }
+    const timer = setTimeout(() => {
+      soundTimersRef.current.delete(timer);
+      play();
+    }, delayMs);
+    soundTimersRef.current.add(timer);
   }, []);
 
   const match = snapshot.match;
@@ -124,6 +146,8 @@ export default function GameView({
     const roller = players.find((p) => p.id === pendingRoll.playerId);
     const rollerName = roller?.displayName ?? 'Oyuncu';
     setDisplayedDice([pendingRoll.die1, pendingRoll.die2]);
+    setRollToken((t) => t + 1);
+    if (pendingRoll.isDouble) setShakeToken(pendingRoll.stateVersion);
     setRollInProgress(false);
 
     if (soundEnabled) {
@@ -152,8 +176,12 @@ export default function GameView({
     const moverName = mover?.displayName ?? 'Oyuncu';
 
     if (soundEnabled) {
-      if (lastMovePlayed.action === 'Collect') playCollectSound();
-      else playPieceSound();
+      const isCollect = lastMovePlayed.action === 'Collect';
+      // Pul yörüngesi bitip masaya değdiğinde çalar.
+      playLater(
+        isCollect ? playCollectSound : playPieceSound,
+        flightDuration(isCollect ? 'collect' : 'advance', { fast: fastMode, reduced: reducedMotion }),
+      );
     }
 
     // Oynanan hanede altın flaş göster.
@@ -171,7 +199,7 @@ export default function GameView({
     lastMovePlayed.wastedDice.forEach((die) => addHistory(`${die} zarı boşa gitti`));
 
     clearMovePlayed();
-  }, [lastMovePlayed, players, soundEnabled, addHistory, clearMovePlayed]);
+  }, [lastMovePlayed, players, soundEnabled, addHistory, clearMovePlayed, playLater, fastMode, reducedMotion]);
 
   // Flaş kısa süre sonra sönsün.
   useEffect(() => {
@@ -184,7 +212,9 @@ export default function GameView({
   useEffect(() => {
     if (!lastRoundEnded) return;
     if (soundEnabled) {
-      if (lastRoundEnded.winnerPlayerId === myPlayerId) playWinSound();
+      const iWon = lastRoundEnded.winnerPlayerId === myPlayerId;
+      if (iWon && lastRoundEnded.isMars) playMarsFanfare();
+      else if (iWon) playWinSound();
       else playLoseSound();
     }
     if (!lastRoundEnded.matchCompleted) {
@@ -282,25 +312,11 @@ export default function GameView({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 md:gap-2.5">
-        {rollingPlayerId || rollInProgress ? (
-          <>
-            <Die value={1} rolling size={42} />
-            <Die value={6} rolling size={42} />
-          </>
-        ) : displayedDice ? (
-          <>
-            <Die
-              value={displayedDice[0]}
-              size={42}
-              highlight={displayedDice[0] === displayedDice[1]}
-            />
-            <Die
-              value={displayedDice[1]}
-              size={42}
-              highlight={displayedDice[0] === displayedDice[1]}
-            />
-          </>
-        ) : null}
+        <DiceTray
+          dice={displayedDice}
+          rolling={Boolean(rollingPlayerId) || rollInProgress}
+          rollToken={rollToken}
+        />
       </div>
 
       {!matchCompleted && (
@@ -433,6 +449,7 @@ export default function GameView({
           clickablePoints={clickablePoints}
           myFlash={moveFlash && moveFlash.playerId === myPlayerId ? moveFlash : null}
           opponentFlash={moveFlash && moveFlash.playerId !== myPlayerId ? moveFlash : null}
+          shakeToken={shakeToken}
           onPickPoint={handlePickPoint}
           centerContent={centerContent}
         />
