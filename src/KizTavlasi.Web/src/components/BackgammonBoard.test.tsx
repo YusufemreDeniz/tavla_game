@@ -79,7 +79,6 @@ function renderBoard(overrides: Partial<React.ComponentProps<typeof BackgammonBo
     myFlash: null,
     opponentFlash: null,
     onPickPoint,
-    centerContent: null,
     ...overrides,
   };
   const utils = render(<BackgammonBoard {...props} />);
@@ -161,7 +160,7 @@ describe('BackgammonBoard', () => {
     rerender(<BackgammonBoard {...props} myBoard={board('me', AFTER_SIX_ADVANCED)} />);
 
     expect(screen.getByTestId('flying-piece')).toBeInTheDocument();
-    expect(document.querySelector('[data-piece="me:6:front:0"]')).toHaveAttribute('data-landing', 'true');
+    expect(document.querySelector('[data-piece="me:6:2"]')).toHaveAttribute('data-landing', 'true');
   });
 
   it('hareket azaltma tercihinde uçuş animasyonu oynatılmaz', () => {
@@ -175,14 +174,95 @@ describe('BackgammonBoard', () => {
     expect(document.querySelector('[data-landing]')).toBeNull();
   });
 
+  it('inmiş pullar altın halkasız; inmemişlerden fiziksel bir boşlukla ayrılır', () => {
+    renderBoard({ myBoard: board('me', AFTER_SIX_ADVANCED), clickablePoints: [] });
+
+    const column = screen.getByRole('group', { name: '6. hane: inmemiş 2, inmiş 1 pul' });
+    expect(column.querySelectorAll('[data-piece]')).toHaveLength(3);
+    expect(column.querySelectorAll('[data-gap]')).toHaveLength(1);
+    // Boşluk, arka (inmemiş) gruptan sonra ve öne itilmiş pulun önünde durur.
+    const children = Array.from(column.querySelector('[data-gap]')!.parentElement!.children);
+    expect(children[2]).toHaveAttribute('data-gap');
+    expect(children[3]).toHaveAttribute('data-piece', 'me:6:2');
+    expect(column.innerHTML).not.toContain('212, 175, 55');
+  });
+
+  it('inmiş pul yokken boşluk çizilmez', () => {
+    renderBoard({ clickablePoints: [] });
+    expect(document.querySelectorAll('[data-gap]')).toHaveLength(0);
+  });
+
+  it('toplama: pul raydaki yan yatmış pula uçar, varış kutusu gizlenir', () => {
+    mockLayout();
+    const collecting = (done: boolean) =>
+      board(
+        'me',
+        [
+          [1, 1],
+          [1, 1],
+          [1, done ? 0 : 1],
+          [1, 2],
+          [1, 2],
+          [1, 2],
+        ],
+        done ? 1 : 0,
+      );
+    const { rerender, props } = renderBoard({ myBoard: collecting(false), clickablePoints: [] });
+
+    rerender(<BackgammonBoard {...props} myBoard={collecting(true)} />);
+
+    expect(screen.getByTestId('flying-piece')).toHaveAttribute('data-kind', 'collect');
+    expect(document.querySelector('[data-piece="me:rail:0"]')).toHaveAttribute('data-landing', 'true');
+    expect(screen.getByRole('group', { name: 'Ayşe: toplanan 1 pul' })).toBeInTheDocument();
+  });
+
+  it('yatay tahta: 24 hane (12 boş kanat + 2 oynanan çeyrek), pullar dikey istiflenir', () => {
+    renderBoard({ orientation: 'landscape', clickablePoints: [] });
+
+    expect(document.querySelectorAll('[data-empty]')).toHaveLength(12);
+    expect(screen.getAllByRole('region', { name: /(Ayşe|Fatma) tahtası/ })).toHaveLength(2);
+    expect(screen.getAllByRole('group', { name: /^\d\. hane:/ })).toHaveLength(12);
+    // Benim çeyreğim altta: pullar alt kenardan yukarı doğru dizilir.
+    expect(document.querySelector('[data-piece="me:1:0"]')!.parentElement).toHaveClass('flex-col-reverse');
+    expect(document.querySelector('[data-piece="them:1:0"]')!.parentElement).toHaveClass('flex-col');
+  });
+
+  it('dikey (telefon) tahta: aynı 24 hane, menteşe yatay, pullar yatay istiflenir', () => {
+    renderBoard({ orientation: 'portrait', clickablePoints: [] });
+
+    expect(document.querySelectorAll('[data-empty]')).toHaveLength(12);
+    expect(document.querySelector('[data-piece="me:1:0"]')!.parentElement).toHaveClass('flex-row');
+    expect(document.querySelector('[data-piece="them:1:0"]')!.parentElement).toHaveClass('flex-row-reverse');
+  });
+
+  it('oynanabilir hanede hareket edecek pul hafifçe kalkık; dokununca hareketine başlar', () => {
+    const { onPickPoint } = renderBoard({ clickablePoints: [6] });
+    const movable = document.querySelector('[data-piece="me:6:2"]')!;
+    expect(movable).toHaveAttribute('data-mode', 'hint');
+    expect(document.querySelector('[data-piece="me:5:2"]')).not.toHaveAttribute('data-mode');
+    expect(document.querySelector('[data-glow="on"]')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '6. haneyi oyna' }));
+
+    expect(onPickPoint).toHaveBeenCalledWith(6);
+    expect(movable).toHaveAttribute('data-mode', 'pressed');
+  });
+
+  it('hane numaraları çok soluk; adet rozeti yalnızca istif sayılamayacak kadar büyükse görünür', () => {
+    renderBoard({ clickablePoints: [] });
+    const label = screen.getAllByText('6')[0];
+    expect(label).toHaveStyle({ opacity: '0.38' });
+    expect(document.body.innerHTML).not.toContain('bg-black/60');
+  });
+
   it('hamle sonrası ilgisiz haneler yeniden mount edilmez', () => {
     const { rerender, props } = renderBoard();
-    const untouched = document.querySelector('[data-piece="me:1:back:0"]');
+    const untouched = document.querySelector('[data-piece="me:1:0"]');
 
     rerender(<BackgammonBoard {...props} myBoard={board('me', AFTER_SIX_ADVANCED)} onPickPoint={vi.fn()} />);
 
     // Aynı DOM düğümü korunur: ilgisiz hane yeniden mount edilmez.
-    expect(document.querySelector('[data-piece="me:1:back:0"]')).toBe(untouched);
-    expect(document.querySelector('[data-piece="me:6:front:0"]')).not.toBeNull();
+    expect(document.querySelector('[data-piece="me:1:0"]')).toBe(untouched);
+    expect(document.querySelector('[data-piece="me:6:2"]')).not.toBeNull();
   });
 });

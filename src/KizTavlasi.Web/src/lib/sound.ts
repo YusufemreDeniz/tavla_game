@@ -139,54 +139,37 @@ function noise({ volume, delayMs = 0, durationMs, filter, frequency, q = 1 }: No
   source.start(start, offset, durationMs / 1000 + 0.02);
 }
 
-/** Ahşap gövde vuruşu: perdesi hızla düşen sinüs + üst kısmi + temas tıkı. */
-function woodKnock(delayMs: number, pitch: number, volume: number): void {
-  tone({ frequency: pitch, endFrequency: pitch * 0.62, volume, delayMs, attackMs: 2, decayMs: 95 });
-  tone({
-    frequency: pitch * 2.76,
-    endFrequency: pitch * 2.3,
-    type: 'triangle',
-    volume: volume * 0.32,
-    delayMs,
-    attackMs: 1,
-    decayMs: 40,
-    lowpassHz: 2400,
-  });
-  noise({ volume: volume * 0.55, delayMs, durationMs: 22, filter: 'bandpass', frequency: 1700, q: 1.4 });
-}
-
-/** Kemik zarın ahşaba çarpması: parlak tık + kısa gövde tınısı. */
-function boneClack(delayMs: number, volume: number): void {
+/** Kısa, filtrelenmiş gürültü darbesi: ahşap/kemik teması saf tondan değil gürültüden doğar. */
+function knock(o: {
+  type: BiquadFilterType;
+  hz: number;
+  ms: number;
+  volume: number;
+  q?: number;
+  delayMs?: number;
+}): void {
   noise({
-    volume,
-    delayMs,
-    durationMs: 16,
-    filter: 'bandpass',
-    frequency: jitter(3400, 0.15),
-    q: 2.5,
+    volume: o.volume,
+    delayMs: o.delayMs ?? 0,
+    durationMs: o.ms,
+    filter: o.type,
+    frequency: o.hz,
+    q: o.q ?? 0.8,
   });
-  tone({
-    frequency: jitter(900, 0.1),
-    endFrequency: 620,
-    type: 'triangle',
-    volume: volume * 0.35,
-    delayMs,
-    attackMs: 1,
-    decayMs: 30,
-  });
-  woodKnock(delayMs, jitter(210, 0.08), volume * 0.5);
 }
 
-export function playDiceSound(): void {
-  // İki zar masaya düşer ve giderek sıklaşan, sönümlenen sekmelerle durur.
-  const bounces = [0, 115, 195, 250, 290, 318];
-  bounces.forEach((t, i) => {
-    const volume = 0.22 * Math.pow(0.68, i);
-    boneClack(jitter(t, 0.06), volume);
-    if (i < 4) boneClack(jitter(t + 38, 0.12), volume * 0.8);
-  });
-  // Zarların yuvarlanırken çıkardığı hafif hışırtı.
-  noise({ volume: 0.035, durationMs: 330, filter: 'bandpass', frequency: 2200, q: 0.6 });
+/** Pulun ahşap tahtaya oturması: tok, kısa "tak" (alçak geçiren ~1.8 kHz, ~40 ms) + hafif gövde. */
+function woodSeat(delayMs: number, volume: number): void {
+  knock({ type: 'lowpass', hz: jitter(1800, 0.1), q: 0.7, ms: 42, volume, delayMs });
+  knock({ type: 'lowpass', hz: 480, q: 0.6, ms: 70, volume: volume * 0.7, delayMs });
+}
+
+/** Kemik zarın ahşaba çarpması: parlak "tık". strength azaldıkça (sekmeler) kısalır ve sessizleşir. */
+function boneClack(delayMs: number, volume: number, strength = 1): void {
+  const ms = 8 + 12 * strength;
+  knock({ type: 'bandpass', hz: jitter(3300, 0.12), q: 2.4, ms, volume, delayMs });
+  knock({ type: 'highpass', hz: 5200, q: 0.7, ms: ms * 0.6, volume: volume * 0.35, delayMs });
+  knock({ type: 'lowpass', hz: 900, q: 0.7, ms: 22, volume: volume * 0.3 * strength, delayMs });
 }
 
 /** Sıcak akor: hafif tıngırdatılmış üçgen dalgalar, yumuşak filtreyle. */
@@ -198,23 +181,41 @@ function warmChord(frequencies: number[], delayMs: number, volume: number, decay
   });
 }
 
-export function playDoubleSound(): void {
-  // Zar sekmesi + zarlar oturunca sıcak Re majör akoru.
-  playDiceSound();
-  warmChord([293.66, 369.99, 440, 587.33], 260, 0.085, 900);
+/**
+ * Zarın masaya tek bir değmesi. Atış animasyonu her sekmede çağırır: strength 1 ilk (sert) değme,
+ * sonraki sekmeler giderek hafifler ve kısalır; ses böylece zarın görünen hareketiyle eşzamanlı kalır.
+ */
+export function playDiceImpact(strength = 1): void {
+  boneClack(0, 0.2 * (0.25 + 0.75 * strength), strength);
+}
+
+/** Çift zar yerine oturunca duyulan sıcak akor (zar sekmeleri ayrıca çalar). */
+export function playDoubleChord(): void {
+  warmChord([293.66, 369.99, 440, 587.33], 0, 0.085, 900);
 }
 
 export function playPieceSound(): void {
-  // Ceviz pulun tahtaya tok oturuşu: alçak gövde + kısa temas.
-  woodKnock(0, jitter(150, 0.05), 0.3);
-  noise({ volume: 0.05, durationMs: 60, filter: 'lowpass', frequency: 700 });
+  woodSeat(0, jitter(0.5, 0.08));
 }
 
-export function playCollectSound(): void {
-  // Pul kenar tepsisine bırakılır: daha ince vuruş + yumuşak çan tınısı.
-  woodKnock(0, jitter(240, 0.05), 0.22);
-  tone({ frequency: 1046.5, volume: 0.05, delayMs: 40, attackMs: 6, decayMs: 420 });
-  tone({ frequency: 1567.98, volume: 0.03, delayMs: 70, attackMs: 6, decayMs: 360 });
+/**
+ * Toplama: pul tepsiye iner ve rayda diğer pullara çarpar. Raydaki pul sayısı arttıkça
+ * çarpışma "tıkırtısı" uzar (en fazla 4 küçük çarpma).
+ */
+export function playCollectSound(stackSize = 0): void {
+  knock({ type: 'lowpass', hz: jitter(2200, 0.08), q: 0.7, ms: 34, volume: 0.4 });
+  knock({ type: 'lowpass', hz: 700, q: 0.6, ms: 55, volume: 0.25 });
+  const hits = Math.min(4, 1 + Math.floor(stackSize / 4));
+  for (let i = 1; i <= hits; i += 1) {
+    knock({
+      type: 'bandpass',
+      hz: jitter(2600, 0.15),
+      q: 3,
+      ms: 7,
+      volume: 0.18 / i,
+      delayMs: 13 * i + Math.random() * 6,
+    });
+  }
 }
 
 export function playWinSound(): void {
@@ -284,5 +285,5 @@ export function playMarsFanfare(): void {
 
 export function playTickSound(urgent = false): void {
   // Tahta blok tıkırtısı (süre uyarısı).
-  woodKnock(0, urgent ? 520 : 420, urgent ? 0.16 : 0.1);
+  knock({ type: 'bandpass', hz: urgent ? 1700 : 1300, q: 2, ms: 22, volume: urgent ? 0.16 : 0.1 });
 }

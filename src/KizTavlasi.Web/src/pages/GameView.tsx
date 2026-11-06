@@ -6,7 +6,7 @@ import type { MatchStatsDto, RoomSnapshotDto } from '../types/game';
 import { useGameStore } from '../store/gameStore';
 import { useUiStore } from '../store/uiStore';
 import Die from '../components/Die';
-import DiceTray from '../components/DiceTray';
+import DiceArena, { type DiceImpact } from '../components/DiceArena';
 import TurnTimer from '../components/TurnTimer';
 import MatchStatsPanel from '../components/MatchStatsPanel';
 import BackgammonBoard, { type PointFlash } from '../components/BackgammonBoard';
@@ -16,14 +16,18 @@ import MarsCelebration from '../components/MarsCelebration';
 import { ReactionsBar } from '../components/ReactionsBar';
 import {
   playCollectSound,
-  playDiceSound,
-  playDoubleSound,
+  playDiceImpact,
+  playDoubleChord,
   playLoseSound,
   playMarsFanfare,
   playPieceSound,
   playWinSound,
 } from '../lib/sound';
-import { flightDuration, useMotionPrefs } from '../lib/motion';
+import { flightTouchdownMs, useMotionPrefs } from '../lib/motion';
+import { diceUsage } from '../lib/diceUsage';
+import { useBoardOrientation } from '../lib/useBoardOrientation';
+
+const NOT_USED: [boolean, boolean] = [false, false];
 
 interface GameViewProps {
   snapshot: RoomSnapshotDto;
@@ -67,6 +71,7 @@ export default function GameView({
   const addHistory = useGameStore((s) => s.addHistory);
   const soundEnabled = useUiStore((s) => s.soundEnabled);
   const { fast: fastMode, reduced: reducedMotion } = useMotionPrefs();
+  const orientation = useBoardOrientation();
 
   const [displayedDice, setDisplayedDice] = useState<[number, number] | null>(null);
   const [rollInProgress, setRollInProgress] = useState(false);
@@ -74,6 +79,10 @@ export default function GameView({
   const [moveFlash, setMoveFlash] = useState<(PointFlash & { playerId: string }) | null>(null);
   const [rollToken, setRollToken] = useState(0);
   const [shakeToken, setShakeToken] = useState<number | null>(null);
+  /** Son zarı atan oyuncu: zarlar onun tarafından fırlatılır. */
+  const [rollerId, setRollerId] = useState<string | null>(null);
+  /** Zarlar masaya oturdu (atış animasyonu bitti). */
+  const [diceSettled, setDiceSettled] = useState(false);
   const rollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const soundTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
@@ -161,13 +170,10 @@ export default function GameView({
     const rollerName = roller?.displayName ?? 'Oyuncu';
     setDisplayedDice([pendingRoll.die1, pendingRoll.die2]);
     setRollToken((t) => t + 1);
-    if (pendingRoll.isDouble) setShakeToken(pendingRoll.stateVersion);
+    setRollerId(pendingRoll.playerId);
+    setDiceSettled(false);
     setRollInProgress(false);
-
-    if (soundEnabled) {
-      if (pendingRoll.isDouble) playDoubleSound();
-      else playDiceSound();
-    }
+    // Zar sesi ve çift zar sarsıntısı, DiceArena'nın masaya değme anlarında tetiklenir (handleDiceImpact).
 
     addHistory(
       `${rollerName} ${pendingRoll.die1}-${pendingRoll.die2} attı${pendingRoll.isDouble ? ' (çift!)' : ''}`,
@@ -181,7 +187,12 @@ export default function GameView({
     }
 
     setPendingRoll(null);
-  }, [pendingRoll, players, soundEnabled, addHistory, setPendingRoll]);
+  }, [pendingRoll, players, addHistory, setPendingRoll]);
+
+  // Rakip zar atmaya başlayınca önceki zarlar tahtadan kalkar; yeni atış elde sallanarak başlar.
+  useEffect(() => {
+    if (rollingPlayerId) setDisplayedDice(null);
+  }, [rollingPlayerId]);
 
   // Oynanan hamle: ses + geçmiş + hane vurgusu.
   useEffect(() => {
@@ -191,10 +202,12 @@ export default function GameView({
 
     if (soundEnabled) {
       const isCollect = lastMovePlayed.action === 'Collect';
-      // Pul yörüngesi bitip masaya değdiğinde çalar.
+      // Ses, pul masaya DEĞDİĞİ anda çalar (uçuşun sonunda küçük sekme/oturma kalır).
+      const railCount =
+        round?.boards.find((b) => b.playerId === lastMovePlayed.playerId)?.collectedCount ?? 0;
       playLater(
-        isCollect ? playCollectSound : playPieceSound,
-        flightDuration(isCollect ? 'collect' : 'advance', { fast: fastMode, reduced: reducedMotion }),
+        isCollect ? () => playCollectSound(railCount) : playPieceSound,
+        flightTouchdownMs(isCollect ? 'collect' : 'advance', { fast: fastMode, reduced: reducedMotion }),
       );
     }
 
@@ -213,7 +226,7 @@ export default function GameView({
     lastMovePlayed.wastedDice.forEach((die) => addHistory(`${die} zarı boşa gitti`));
 
     clearMovePlayed();
-  }, [lastMovePlayed, players, soundEnabled, addHistory, clearMovePlayed, playLater, fastMode, reducedMotion]);
+  }, [lastMovePlayed, players, soundEnabled, addHistory, clearMovePlayed, playLater, fastMode, reducedMotion, round]);
 
   // Flaş kısa süre sonra sönsün.
   useEffect(() => {
@@ -245,13 +258,34 @@ export default function GameView({
     }
   }, [lastRoundEnded, myPlayerId, soundEnabled, fastMode, setRoundEnded, spectator]);
 
-  // Sıra el değiştirince gösterilen zarları temizle.
+  // Hamleler bitince zarlar bir süre tahtada kalır, sonra kalkar. Zarlar masaya oturmadan (atış
+  // animasyonu sürerken) kaldırılmaz; oturma bildirimi gelmezse güvenlik payıyla yine kaldırılır.
   useEffect(() => {
     if (!hasPendingMoves && displayedDice !== null) {
-      const timer = setTimeout(() => setDisplayedDice(null), fastMode ? 900 : 1600);
+      const rest = fastMode ? 900 : 1600;
+      const timer = setTimeout(() => setDisplayedDice(null), diceSettled ? rest : rest + 2500);
       return () => clearTimeout(timer);
     }
-  }, [hasPendingMoves, displayedDice, fastMode, round?.currentPlayerId]);
+  }, [hasPendingMoves, displayedDice, diceSettled, fastMode, round?.currentPlayerId]);
+
+  /** Zar her sekmesinde: sesi masaya değme anıyla eşzamanlar; çift zarda ilk değmede masa sarsılır. */
+  const handleDiceImpact = useCallback(
+    ({ strength, first }: DiceImpact) => {
+      if (soundEnabled) playDiceImpact(strength);
+      if (first && displayedDice && displayedDice[0] === displayedDice[1]) {
+        setShakeToken(Date.now());
+      }
+    },
+    [soundEnabled, displayedDice],
+  );
+
+  const handleDiceSettled = useCallback(
+    ({ isDouble }: { isDouble: boolean }) => {
+      setDiceSettled(true);
+      if (isDouble && soundEnabled) playDoubleChord();
+    },
+    [soundEnabled],
+  );
 
   const handleRoll = () => {
     if (!isMyTurn || rollInProgress || iMustMove) return;
@@ -302,6 +336,18 @@ export default function GameView({
 
   const totalRemainingMoves = pendingDice.length + pendingPicks;
 
+  // Zarlar, atan oyuncunun tarafından fırlatılır: benim atışım alttan, rakibinki üstten.
+  const throwerId = rollInProgress ? myPlayerId : (rollingPlayerId ?? rollerId);
+  // Zarlar boş kanada atılır: yatayda soldaki kanat, dikeyde üstteki kanat.
+  const mySide = orientation === 'landscape' ? 'bottom' : 'left';
+  const theirSide = orientation === 'landscape' ? 'top' : 'right';
+  const diceSide = throwerId !== null && throwerId !== viewerId ? theirSide : mySide;
+  const diceZone =
+    orientation === 'landscape' ? { cx: 0.24, cy: 0.5, spread: 0.1 } : { cx: 0.5, cy: 0.22 };
+  const diceUsed = displayedDice
+    ? diceUsage(displayedDice, pendingDice, hasPendingMoves)
+    : NOT_USED;
+
   const currentName = currentPlayer?.displayName ?? 'Oyuncu';
   const statusText = matchCompleted
     ? 'Maç bitti'
@@ -329,8 +375,9 @@ export default function GameView({
     currentPlayer !== null &&
     !currentPlayer.isBot;
 
-  const centerContent = (
-    <div className="flex w-full items-center justify-between gap-2 md:gap-4">
+  // Kontroller tahtanın dışında: telefonda ekranın altına yapışık, masaüstünde tahtanın altında.
+  const controlBar = (
+    <div className="sticky bottom-2 z-30 flex w-full items-center justify-between gap-2 rounded-2xl border border-gold-500/20 bg-night-800/95 px-3 py-2.5 shadow-xl backdrop-blur md:static md:gap-4 md:px-4">
       {showTimer && round?.turnDeadlineUtc && (
         <TurnTimer
           key={round.turnDeadlineUtc}
@@ -350,14 +397,6 @@ export default function GameView({
             Kalan hamle hakkı: {totalRemainingMoves}
           </p>
         )}
-      </div>
-
-      <div className="flex shrink-0 items-center gap-1.5 md:gap-2.5">
-        <DiceTray
-          dice={displayedDice}
-          rolling={Boolean(rollingPlayerId) || rollInProgress}
-          rollToken={rollToken}
-        />
       </div>
 
       {!matchCompleted && spectator && (
@@ -500,9 +539,23 @@ export default function GameView({
           opponentFlash={moveFlash && moveFlash.playerId !== viewerId ? moveFlash : null}
           shakeToken={shakeToken}
           onPickPoint={handlePickPoint}
-          centerContent={centerContent}
+          orientation={orientation}
+          overlay={
+            <DiceArena
+              dice={displayedDice}
+              rolling={Boolean(rollingPlayerId) || rollInProgress}
+              side={diceSide}
+              zone={diceZone}
+              rollToken={rollToken}
+              used={diceUsed}
+              onImpact={handleDiceImpact}
+              onSettled={handleDiceSettled}
+            />
+          }
         />
       )}
+
+      {myBoard && opponentBoard && me && opponent && controlBar}
 
       {/* Tepkiler */}
       {!matchCompleted && !spectator && <ReactionsBar onSend={onSendReaction} />}

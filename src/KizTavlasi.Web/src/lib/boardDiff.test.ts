@@ -26,7 +26,7 @@ const INITIAL: [number, number][] = [
 ];
 
 describe('detectPieceMove', () => {
-  it('indirme: son arka puldan yeni ön pula yörünge çıkarır', () => {
+  it('indirme: pul kimliği (slot) değişmez; aynı düğüm boşluğun ötesine itilir', () => {
     const after = INITIAL.map((p, i) => (i === 5 ? ([2, 1] as [number, number]) : p));
     const move = detectPieceMove(board(INITIAL), board(after));
 
@@ -34,19 +34,30 @@ describe('detectPieceMove', () => {
       kind: 'advance',
       playerId: 'p1',
       point: 6,
-      fromKey: pieceKey('p1', 6, 'back', 2),
-      toKey: pieceKey('p1', 6, 'front', 0),
+      fromKey: pieceKey('p1', 6, 2),
+      toKey: pieceKey('p1', 6, 2),
     });
   });
 
-  it('toplama: önce inmiş pul kalkar ve raydaki yeni en üst pula gider', () => {
+  it('indirme: önceden inmiş pul varsa itilen pul arka grubun son pulu olarak kalır', () => {
+    const before = board([[2, 0], [2, 0], [2, 0], [3, 0], [3, 0], [2, 1]]);
+    const after = board([[2, 0], [2, 0], [2, 0], [3, 0], [3, 0], [1, 2]]);
+
+    expect(detectPieceMove(before, after)).toMatchObject({
+      kind: 'advance',
+      fromKey: pieceKey('p1', 6, 1),
+      toKey: pieceKey('p1', 6, 1),
+    });
+  });
+
+  it('toplama: hanedeki en yüksek slot raydaki yeni en üst pula gider', () => {
     const before = board([[1, 1], [1, 1], [1, 1], [1, 2], [1, 2], [1, 2]], 0);
     const after = board([[1, 1], [1, 1], [1, 0], [1, 2], [1, 2], [1, 2]], 1);
 
     expect(detectPieceMove(before, after)).toMatchObject({
       kind: 'collect',
       point: 3,
-      fromKey: pieceKey('p1', 3, 'front', 0),
+      fromKey: pieceKey('p1', 3, 1),
       toKey: railKey('p1', 0),
     });
   });
@@ -57,7 +68,7 @@ describe('detectPieceMove', () => {
 
     expect(detectPieceMove(before, after)).toMatchObject({
       kind: 'collect',
-      fromKey: pieceKey('p1', 1, 'back', 0),
+      fromKey: pieceKey('p1', 1, 0),
       toKey: railKey('p1', 14),
     });
   });

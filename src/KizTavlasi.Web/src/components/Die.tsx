@@ -1,39 +1,6 @@
 import { useId } from 'react';
 import { motion } from 'framer-motion';
-
-const PIP_LAYOUTS: Record<number, [number, number][]> = {
-  1: [[50, 50]],
-  2: [
-    [29, 29],
-    [71, 71],
-  ],
-  3: [
-    [27, 27],
-    [50, 50],
-    [73, 73],
-  ],
-  4: [
-    [29, 29],
-    [71, 29],
-    [29, 71],
-    [71, 71],
-  ],
-  5: [
-    [27, 27],
-    [73, 27],
-    [50, 50],
-    [27, 73],
-    [73, 73],
-  ],
-  6: [
-    [29, 25],
-    [71, 25],
-    [29, 50],
-    [71, 50],
-    [29, 75],
-    [71, 75],
-  ],
-};
+import { PIP_LAYOUTS } from '../lib/dicePips';
 
 interface DieProps {
   value: number;

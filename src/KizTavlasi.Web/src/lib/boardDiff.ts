@@ -4,21 +4,25 @@ import type { PlayerBoardDto } from '../types/game';
  * İki authoritative snapshot arasındaki görsel farkı bulur: hangi pul hangi
  * konumdan hangi konuma geçti? Kural hesaplamaz; yalnızca sunucunun zaten
  * uyguladığı değişikliği animasyon için yorumlar.
+ *
+ * Pul kimliği (slot): bir hanedeki pullar, hane kenarından ortaya doğru 0..N-1
+ * numaralanır. İnmemiş pullar önce, inmişler (öne itilmişler) sonra gelir. Bu yüzden
+ * bir pul indirildiğinde numarası DEĞİŞMEZ; yalnızca grup değiştirir (aradaki boşluğun
+ * ötesine geçer). Toplamada ise her zaman en yüksek slot'taki pul hanedendir. Böylece
+ * pul, DOM'da aynı düğüm olarak kalır ve hiçbir zaman silinip yeniden oluşturulmaz.
  */
-export type PieceStack = 'back' | 'front';
-
 export interface PieceMove {
   kind: 'advance' | 'collect';
   playerId: string;
   point: number;
   /** Önceki render'daki kaynak pulun DOM anahtarı. */
   fromKey: string;
-  /** Yeni render'daki hedef pulun DOM anahtarı. */
+  /** Yeni render'daki hedef pulun DOM anahtarı (indirmede kaynakla aynıdır). */
   toKey: string;
 }
 
-export function pieceKey(playerId: string, point: number, stack: PieceStack, index: number): string {
-  return `${playerId}:${point}:${stack}:${index}`;
+export function pieceKey(playerId: string, point: number, slot: number): string {
+  return `${playerId}:${point}:${slot}`;
 }
 
 export function railKey(playerId: string, index: number): string {
@@ -47,13 +51,9 @@ export function detectPieceMove(prev: PlayerBoardDto, next: PlayerBoardDto): Pie
     after.frontCount === before.frontCount + 1 &&
     next.collectedCount === prev.collectedCount;
   if (isAdvance) {
-    return {
-      kind: 'advance',
-      playerId,
-      point,
-      fromKey: pieceKey(playerId, point, 'back', before.backCount - 1),
-      toKey: pieceKey(playerId, point, 'front', after.frontCount - 1),
-    };
+    // İnen pul, arka grubun son pulu: slot'u aynı kalır, boşluğun ötesine itilir.
+    const slot = pieceKey(playerId, point, before.backCount - 1);
+    return { kind: 'advance', playerId, point, fromKey: slot, toKey: slot };
   }
 
   const totalBefore = before.backCount + before.frontCount;
@@ -61,14 +61,11 @@ export function detectPieceMove(prev: PlayerBoardDto, next: PlayerBoardDto): Pie
   const isCollect =
     totalAfter === totalBefore - 1 && next.collectedCount === prev.collectedCount + 1;
   if (isCollect) {
-    const fromFront = after.frontCount < before.frontCount;
     return {
       kind: 'collect',
       playerId,
       point,
-      fromKey: fromFront
-        ? pieceKey(playerId, point, 'front', before.frontCount - 1)
-        : pieceKey(playerId, point, 'back', before.backCount - 1),
+      fromKey: pieceKey(playerId, point, totalBefore - 1),
       toKey: railKey(playerId, next.collectedCount - 1),
     };
   }
