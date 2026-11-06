@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import GameView from './GameView';
 import { useGameStore } from '../store/gameStore';
@@ -295,5 +295,47 @@ describe('GameView', () => {
 
       expect(screen.queryByRole('timer')).not.toBeInTheDocument();
     });
+  });
+  it('boş gelen atışta zarlar, rakibin atışı başlasa bile yere inip okunana kadar kaybolmaz', () => {
+    vi.useFakeTimers();
+    try {
+      renderGameView(playingSnapshot('p2')); // boş atıştan sonra sıra hemen rakipte
+
+      act(() => {
+        useGameStore.getState().setPendingRoll({
+          playerId: 'p1',
+          die1: 2,
+          die2: 6,
+          isDouble: false,
+          wastedSteps: [],
+          playableDice: [],
+          bonusPicksGranted: 0,
+          turnWasted: true,
+          stateVersion: 5,
+        });
+      });
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      // Rakip (bot) hemen atmaya başlar: önceki zarlar bunu görünce silinmemeli.
+      act(() => {
+        useGameStore.getState().setRollingPlayer('p2');
+      });
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+
+      expect(screen.getByTestId('dice-arena')).toHaveAttribute('data-phase', 'thrown');
+      expect(screen.getByRole('img', { name: 'Zar: 2' })).toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Zar: 6' })).toBeInTheDocument();
+
+      // Atış ve okunma süresi dolunca zarlar kalkar; rakibin zarları elde sallanır.
+      act(() => {
+        vi.advanceTimersByTime(6000);
+      });
+      expect(screen.getByTestId('dice-arena')).toHaveAttribute('data-phase', 'shaking');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

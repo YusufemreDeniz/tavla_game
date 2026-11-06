@@ -23,7 +23,8 @@ import {
   playPieceSound,
   playWinSound,
 } from '../lib/sound';
-import { flightTouchdownMs, useMotionPrefs } from '../lib/motion';
+import { flightTouchdownMs, scaleDuration, useMotionPrefs } from '../lib/motion';
+import { MIN_SHAKE_MS, SECOND_DIE_DELAY_MS, THROW_MS } from '../lib/diceThrow';
 import { diceUsage } from '../lib/diceUsage';
 import { useBoardOrientation } from '../lib/useBoardOrientation';
 
@@ -83,6 +84,9 @@ export default function GameView({
   const [rollerId, setRollerId] = useState<string | null>(null);
   /** Zarlar masaya oturdu (atış animasyonu bitti). */
   const [diceSettled, setDiceSettled] = useState(false);
+  /** Zarların ekrana konduğu an (sonraki atış, bunlar inip okunana kadar bekler). */
+  const diceShownAtRef = useRef<number | null>(null);
+  const [holdTick, setHoldTick] = useState(0);
   const rollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const soundTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
@@ -96,6 +100,21 @@ export default function GameView({
       soundTimers.clear();
     };
   }, []);
+
+  // Ekranda zar yokken bekleme süresi de yok (örn. kendi atışımda eski zarlar temizlenmiştir).
+  useEffect(() => {
+    if (displayedDice === null) diceShownAtRef.current = null;
+  }, [displayedDice]);
+
+  /** Ekrandaki zarların atış animasyonu + okunma süresi bitene kadar kalan ms. */
+  const diceHoldRemaining = useCallback(() => {
+    if (diceShownAtRef.current === null) return 0;
+    const prefs = { fast: fastMode, reduced: reducedMotion };
+    const total =
+      scaleDuration(MIN_SHAKE_MS + THROW_MS + SECOND_DIE_DELAY_MS, prefs) +
+      scaleDuration(1500, prefs);
+    return Math.max(0, diceShownAtRef.current + total - performance.now());
+  }, [fastMode, reducedMotion]);
 
   /** Sesi animasyonla eşzamanlamak için gecikmeli çalar (pul masaya değdiğinde). */
   const playLater = useCallback((play: () => void, delayMs: number) => {
@@ -161,6 +180,14 @@ export default function GameView({
   useEffect(() => {
     if (!pendingRoll) return;
 
+    // Önceki zarlar henüz inmediyse veya okunacak kadar görünmediyse yeni atış bekler
+    // (boş gelen atışta sıra hemen rakibe geçer; zarlar yok olmamalı).
+    const wait = diceHoldRemaining();
+    if (wait > 0) {
+      const timer = setTimeout(() => setHoldTick((n) => n + 1), wait);
+      return () => clearTimeout(timer);
+    }
+
     if (rollTimeoutRef.current) {
       clearTimeout(rollTimeoutRef.current);
       rollTimeoutRef.current = null;
@@ -168,6 +195,7 @@ export default function GameView({
 
     const roller = players.find((p) => p.id === pendingRoll.playerId);
     const rollerName = roller?.displayName ?? 'Oyuncu';
+    diceShownAtRef.current = performance.now();
     setDisplayedDice([pendingRoll.die1, pendingRoll.die2]);
     setRollToken((t) => t + 1);
     setRollerId(pendingRoll.playerId);
@@ -188,12 +216,14 @@ export default function GameView({
     );
 
     setPendingRoll(null);
-  }, [pendingRoll, players, addHistory, setPendingRoll]);
+  }, [pendingRoll, players, addHistory, setPendingRoll, holdTick, diceHoldRemaining]);
 
   // Rakip zar atmaya başlayınca önceki zarlar tahtadan kalkar; yeni atış elde sallanarak başlar.
   useEffect(() => {
-    if (rollingPlayerId) setDisplayedDice(null);
-  }, [rollingPlayerId]);
+    if (!rollingPlayerId) return;
+    const timer = setTimeout(() => setDisplayedDice(null), diceHoldRemaining());
+    return () => clearTimeout(timer);
+  }, [rollingPlayerId, diceHoldRemaining]);
 
   // Oynanan hamle: ses + geçmiş + hane vurgusu.
   useEffect(() => {
