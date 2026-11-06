@@ -412,14 +412,21 @@ function ConnectedRoom({
     [snapshot, myPlayerId, roomCode, token, navigate, showToast],
   );
 
+  const matchActive = snapshot?.status === 'Playing' || snapshot?.status === 'Completed';
+
   const header = useMemo(
     () => (
       <header className="mb-3 flex items-center justify-between gap-2 md:mb-4">
         <div className="flex items-center gap-2.5">
-          <span className="rounded-lg border border-gold-500/30 bg-night-800 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-gold-400">
-            {roomCode}
-          </span>
-          <ConnectionBadge status={connectionStatus} />
+          {/* Oyun sürerken oda kodu ve "Bağlı" rozeti gizlenir; bağlantı sorunu olursa rozet görünür. */}
+          {(!matchActive || connectionStatus !== 'connected') && (
+            <>
+              <span className="rounded-lg border border-gold-500/30 bg-night-800 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-gold-400">
+                {roomCode}
+              </span>
+              <ConnectionBadge status={connectionStatus} />
+            </>
+          )}
           {spectatorCount > 0 && (
             <span
               className="inline-flex items-center gap-1 rounded-full border border-night-600 px-2 py-0.5 text-[11px] text-cream-300"
@@ -476,6 +483,7 @@ function ConnectedRoom({
     [
       roomCode,
       connectionStatus,
+      matchActive,
       spectatorCount,
       spectator,
       fastMode,

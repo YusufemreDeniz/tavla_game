@@ -175,9 +175,6 @@ export default function GameView({
     setRollInProgress(false);
     // Zar sesi ve çift zar sarsıntısı, DiceArena'nın masaya değme anlarında tetiklenir (handleDiceImpact).
 
-    addHistory(
-      `${rollerName} ${pendingRoll.die1}-${pendingRoll.die2} attı${pendingRoll.isDouble ? ' (çift!)' : ''}`,
-    );
     pendingRoll.wastedSteps.forEach((step) => addHistory(`${step.die} zarı boşa gitti`));
     if (pendingRoll.isDouble && pendingRoll.bonusPicksGranted > 0) {
       addHistory(`Çift! Toplam ${pendingRoll.bonusPicksGranted + 1} hamle hakkı`);
@@ -185,6 +182,10 @@ export default function GameView({
     if (pendingRoll.turnWasted) {
       addHistory(`${rollerName} oynayamadı, sıra geçti`);
     }
+    // En yeni kayıt (tek satırlık geçmişte görünen) her zaman atışın kendisidir.
+    addHistory(
+      `${rollerName} ${pendingRoll.die1}-${pendingRoll.die2} attı${pendingRoll.isDouble ? ' (çift!)' : ''}`,
+    );
 
     setPendingRoll(null);
   }, [pendingRoll, players, addHistory, setPendingRoll]);
@@ -429,7 +430,7 @@ export default function GameView({
       {match && (
         <section
           aria-label="Skor"
-          className="flex items-center justify-between rounded-2xl border border-gold-500/20 bg-gradient-to-b from-night-800 to-night-900 px-3.5 py-3 shadow-lg md:px-5"
+          className="flex items-center justify-between rounded-2xl border border-gold-500/20 bg-gradient-to-b from-night-800 to-night-900 px-3.5 py-2 shadow-lg md:px-5"
         >
           <PlayerScore
             isBot={players.find((p) => p.seat === 1)?.isBot}
@@ -501,30 +502,14 @@ export default function GameView({
         )}
       </AnimatePresence>
 
-      {/* Hamle uyarısı */}
-      <AnimatePresence>
-        {iMustMove && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            role="alert"
-            className="rounded-xl border-2 border-gold-500/70 bg-gradient-to-r from-bordo-700/80 via-bordo-600/70 to-bordo-700/80 px-4 py-3 text-center text-sm font-semibold text-cream-50 shadow-md"
-          >
-            {pendingDice.length > 0 ? (
-              <>
-                Zarını oyna: parlayan <span className="text-gold-400">{[...new Set(pendingDice)].join('. ve ')}.</span>{' '}
-                haneye dokun.
-              </>
-            ) : (
-              <>
-                Çift bonusu! <span className="text-gold-400">{pendingPicks}</span> hamle hakkın kaldı —
-                istediğin parlayan haneye dokun.
-              </>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Hamle uyarısı: kontrol çubuğu zaten gösteriyor; ekran okuyucular için görünmez duyuru. */}
+      {iMustMove && (
+        <p role="alert" className="sr-only">
+          {pendingDice.length > 0
+            ? `Zarını oyna: parlayan ${[...new Set(pendingDice)].join('. ve ')}. haneye dokun.`
+            : `Çift bonusu! ${pendingPicks} hamle hakkın kaldı — istediğin parlayan haneye dokun.`}
+        </p>
+      )}
 
       {/* Tavla tahtası */}
       {myBoard && opponentBoard && me && opponent && (
@@ -560,38 +545,8 @@ export default function GameView({
       {/* Tepkiler */}
       {!matchCompleted && !spectator && <ReactionsBar onSend={onSendReaction} />}
 
-      {/* Oyun geçmişi */}
-      {history.length > 0 && (
-        <section
-          aria-label="Oyun geçmişi"
-          className="rounded-xl border border-gold-500/15 bg-night-800/75 p-3 shadow-inner"
-        >
-          <div className="mb-1.5 flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-gold-400/90">
-              Son Hamleler
-            </span>
-            <span className="text-[10px] text-cream-400">Canlı Akış</span>
-          </div>
-          <ul className="space-y-1 text-xs text-cream-300">
-            {history.slice(0, 5).map((entry, index) => (
-              <li
-                key={index}
-                className={`flex items-center gap-2 rounded-md px-2 py-0.5 ${
-                  index === 0 ? 'bg-night-700/70 font-medium text-cream-50' : 'opacity-75'
-                }`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                    index === 0 ? 'bg-gold-400' : 'bg-cream-400/50'
-                  }`}
-                />
-                <span>{entry}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {/* Oyun geçmişi: yalnızca son olay görünür; isteyen genişletir. */}
+      <HistoryTicker history={history} />
 
       {/* MARS kutlaması */}
       <AnimatePresence>{showMars && <MarsCelebration won={marsWon} />}</AnimatePresence>
@@ -775,7 +730,7 @@ function PlayerScore({
         <span className="truncate">{name}</span>
         {isMe && <span className="text-[10px] font-normal text-cream-400">(sen)</span>}
       </span>
-      <ConnectionDot isConnected={isConnected} />
+      {!isConnected && <ConnectionDot isConnected={isConnected} />}
     </div>
   );
 }
@@ -806,5 +761,36 @@ function Confetti() {
         />
       ))}
     </div>
+  );
+}
+
+function HistoryTicker({ history }: { history: string[] }) {
+  const [open, setOpen] = useState(false);
+  if (history.length === 0) return null;
+
+  return (
+    <section aria-label="Oyun geçmişi" className="px-1 text-xs text-cream-300">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-cream-300/80 hover:bg-night-800/60"
+      >
+        <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" />
+        <span className="min-w-0 flex-1 truncate">{history[0]}</span>
+        <span className="shrink-0 text-[10px] uppercase tracking-wider text-cream-400">
+          {open ? 'Gizle' : 'Geçmiş'}
+        </span>
+      </button>
+      {open && (
+        <ul className="mt-1 space-y-1 rounded-xl border border-gold-500/15 bg-night-800/75 p-2.5">
+          {history.slice(1, 6).map((entry, index) => (
+            <li key={index} className="opacity-80">
+              {entry}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
