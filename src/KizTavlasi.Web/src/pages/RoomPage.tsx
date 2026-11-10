@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
 import { BookOpen, DoorOpen, Eye, Volume2, VolumeX, Zap } from 'lucide-react';
 import { z } from 'zod';
 import {
@@ -30,6 +29,7 @@ import ConnectionBadge from '../components/ConnectionBadge';
 import RulesModal from '../components/RulesModal';
 import ShareLinkCard from '../components/ShareLinkCard';
 import { FloatingReactions } from '../components/ReactionsBar';
+import { Button, LoadingScreen, StateScreen, TextField } from '../components/ui';
 import LobbyView from './LobbyView';
 import GameView from './GameView';
 import { PRODUCT_NAME } from '../config/branding';
@@ -161,13 +161,7 @@ function JoinRoomView({
   };
 
   if (roomInfo.isLoading) {
-    return (
-      <main className="flex min-h-screen items-center justify-center">
-        <p className="text-cream-300" role="status">
-          Oda bilgisi yükleniyor…
-        </p>
-      </main>
-    );
+    return <LoadingScreen>Oda bilgisi yükleniyor…</LoadingScreen>;
   }
 
   if (roomInfo.isError) {
@@ -176,18 +170,7 @@ function JoinRoomView({
       error instanceof ApiError
         ? (error.errorCode && ERROR_MESSAGES[error.errorCode]) || error.message
         : 'Oda bilgisi alınamadı.';
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
-        <p className="text-lg text-cream-100">{message}</p>
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="min-h-11 rounded-xl bg-bordo-600 px-6 py-3 font-semibold text-cream-50"
-        >
-          Ana Sayfaya Dön
-        </button>
-      </main>
-    );
+    return <StateScreen title={message} actions={<Button onClick={() => navigate('/')}>Ana Sayfaya Dön</Button>} />;
   }
 
   const host = roomInfo.data?.players.find((p) => p.isHost);
@@ -196,96 +179,72 @@ function JoinRoomView({
   if (isFull) {
     const names = roomInfo.data?.players.map((p) => p.displayName).join(' ve ');
     return (
-      <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-10">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-gold-500/20 bg-night-800 p-6 text-center shadow-xl"
-        >
-          <Eye size={36} className="mx-auto mb-3 text-gold-400" aria-hidden="true" />
-          <h1 className="mb-1 font-display text-2xl text-cream-50">Masa dolu</h1>
-          <p className="mb-6 text-sm text-cream-300">
-            {names ? (
-              <>
-                <strong className="text-gold-400">{names}</strong> oynuyor. Maçı canlı olarak
-                izleyebilirsin.
-              </>
-            ) : (
-              'Bu odadaki iki koltuk da dolu. Maçı canlı olarak izleyebilirsin.'
-            )}
-          </p>
-          <button
-            type="button"
-            onClick={() => watchMutation.mutate()}
-            disabled={watchMutation.isPending}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-bordo-600 to-bordo-700 px-4 py-3 font-semibold text-cream-50 shadow-lg disabled:opacity-60"
-          >
-            <Eye size={18} aria-hidden="true" />
-            {watchMutation.isPending ? 'Bağlanıyor…' : 'Maçı İzle'}
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className="mt-2 min-h-11 w-full rounded-xl border border-night-600 px-4 py-3 font-semibold text-cream-300"
-          >
-            Ana Sayfaya Dön
-          </button>
-        </motion.div>
-      </main>
+      <StateScreen
+        icon={<Eye size={36} />}
+        title="Masa dolu"
+        description={
+          names ? (
+            <>
+              <strong className="font-semibold text-fg-accent">{names}</strong> oynuyor. Maçı canlı olarak izleyebilirsin.
+            </>
+          ) : (
+            'Bu odadaki iki koltuk da dolu. Maçı canlı olarak izleyebilirsin.'
+          )
+        }
+        actions={
+          <>
+            <Button
+              icon={<Eye size={18} />}
+              onClick={() => watchMutation.mutate()}
+              disabled={watchMutation.isPending}
+              loading={watchMutation.isPending}
+              loadingLabel="Bağlanıyor…"
+            >
+              Maçı İzle
+            </Button>
+            <Button variant="ghost" onClick={() => navigate('/')}>
+              Ana Sayfaya Dön
+            </Button>
+          </>
+        }
+      />
     );
   }
 
+  const codeClass = 'font-code font-medium tracking-code text-fg-accent';
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-10">
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl border border-gold-500/20 bg-night-800 p-6 shadow-xl"
-      >
-        <h1 className="mb-1 font-display text-2xl text-cream-50">{PRODUCT_NAME}</h1>
-        <p className="mb-6 text-sm text-cream-300">
-          {host ? (
-            <>
-              <strong className="text-gold-400">{host.displayName}</strong> seni{' '}
-              <span className="font-mono font-bold text-gold-400">{roomCode}</span> odasına davet
-              etti.
-            </>
-          ) : (
-            <>
-              <span className="font-mono font-bold text-gold-400">{roomCode}</span> odasına
-              katılıyorsun.
-            </>
-          )}
-        </p>
-        <form onSubmit={handleJoin} className="space-y-4">
-          <div>
-            <label htmlFor="join-name" className="mb-1.5 block text-sm text-cream-300">
-              Oyuncu adın
-            </label>
-            <input
-              id="join-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={30}
-              placeholder="Örn. Fatma"
-              className="w-full rounded-xl border border-night-600 bg-night-900 px-4 py-3 text-cream-50 placeholder:text-cream-400/50"
-            />
-            {nameError && (
-              <p role="alert" className="mt-1.5 text-xs text-rose-400">
-                {nameError}
-              </p>
-            )}
-          </div>
-          <button
-            type="submit"
-            disabled={joinMutation.isPending}
-            className="min-h-11 w-full rounded-xl bg-gradient-to-r from-bordo-600 to-bordo-700 px-4 py-3 font-semibold text-cream-50 shadow-lg disabled:opacity-60"
-          >
-            {joinMutation.isPending ? 'Katılıyor…' : 'Odaya Katıl'}
-          </button>
-        </form>
-      </motion.div>
-    </main>
+    <StateScreen
+      align="start"
+      title={PRODUCT_NAME}
+      description={
+        host ? (
+          <>
+            <strong className="font-semibold text-fg-accent">{host.displayName}</strong> seni{' '}
+            <span className={codeClass}>{roomCode}</span> odasına davet etti.
+          </>
+        ) : (
+          <>
+            <span className={codeClass}>{roomCode}</span> odasına katılıyorsun.
+          </>
+        )
+      }
+    >
+      <form onSubmit={handleJoin} className="flex flex-col gap-5">
+        <TextField
+          id="join-name"
+          label="Oyuncu adın"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={30}
+          placeholder="Örn. Fatma"
+          error={nameError}
+        />
+        <Button type="submit" fullWidth loading={joinMutation.isPending} loadingLabel="Katılıyor…">
+          Odaya Katıl
+        </Button>
+      </form>
+    </StateScreen>
   );
 }
 
@@ -497,42 +456,29 @@ function ConnectedRoom({
 
   if (connectFailed) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
-        <p className="text-lg text-cream-100">Sunucuya bağlanılamadı.</p>
-        <p className="max-w-sm text-sm text-cream-300">
-          Oturumun geçersiz olabilir veya oda kapanmış olabilir.
-        </p>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="min-h-11 rounded-xl bg-bordo-600 px-6 py-3 font-semibold text-cream-50"
-          >
-            Tekrar Dene
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              clearPlayerToken(roomCode);
-              navigate('/');
-            }}
-            className="min-h-11 rounded-xl border border-night-600 px-6 py-3 font-semibold text-cream-300"
-          >
-            Ana Sayfa
-          </button>
-        </div>
-      </main>
+      <StateScreen
+        title="Sunucuya bağlanılamadı."
+        description="Oturumun geçersiz olabilir veya oda kapanmış olabilir."
+        actions={
+          <>
+            <Button onClick={() => window.location.reload()}>Tekrar Dene</Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                clearPlayerToken(roomCode);
+                navigate('/');
+              }}
+            >
+              Ana Sayfa
+            </Button>
+          </>
+        }
+      />
     );
   }
 
   if (!snapshot) {
-    return (
-      <main className="flex min-h-screen items-center justify-center">
-        <p className="text-cream-300" role="status">
-          Odaya bağlanılıyor…
-        </p>
-      </main>
-    );
+    return <LoadingScreen>Odaya bağlanılıyor…</LoadingScreen>;
   }
 
   const inLobby = snapshot.status === 'Waiting' || snapshot.status === 'InLobby';
