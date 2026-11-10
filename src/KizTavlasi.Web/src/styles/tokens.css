@@ -1,0 +1,231 @@
+/*
+ * Kız Tavlası Online — Design Tokens (Aşama 3.1)
+ * Referans: design-previews/a3-final.html (A3 — Modern Tavla Kulübü, Premium Edition)
+ * Sözleşme: proje kökündeki DESIGN.md
+ *
+ * Mimari (üç katman):
+ *   1. Primitives  → ham değerler  (--color-night-900, --color-gold-500 …)
+ *   2. Semantic    → rol adları    (--color-surface-*, --color-fg-*, --color-action-*, --color-line-*, --color-status-*)
+ *   3. Component   → (Aşama 3.2+) bileşenler yalnızca semantic katmanı tüketir.
+ *
+ * Kurallar:
+ *   - index.css içindeki mevcut @theme paletinin (night/cream/walnut/bordo/gold/copper/rose) adları ve değerleri DEĞİŞMEZ.
+ *   - Bu dosya yalnızca YENİ adlar ekler; mevcut bir Tailwind yardımcı sınıfının (ör. text-sm, rounded-2xl) çıktısını değiştirmez.
+ *   - `@theme static`: tüm token'lar :root'a her zaman yazılır; semantic katman primitive'lere var() ile bağlanabilir.
+ *   - Bu aşamada hiçbir bileşen bu token'ları kullanmaz → mevcut ekranlarda görsel fark yoktur.
+ */
+
+/* ------------------------------------------------------------------ */
+/* 1) COLOR PRIMITIVES — yalnızca A3 için gereken YENİ basamaklar      */
+/* ------------------------------------------------------------------ */
+@theme static {
+  /* night: kontrol kenarlığı ve hover için aydınlık basamaklar */
+  --color-night-750: #1f2538; /* A3 --hover   */
+  --color-night-400: #7d86a0; /* A3 --line (input/seçenek kenarlığı) */
+  --color-night-300: #a1a9c0; /* A3 hover kenarlığı */
+
+  /* stone: A3'ün sıcak-nötr ikincil metin ailesi (cream-300/400'den daha az doygun) */
+  --color-stone-300: #cfc3ab; /* A3 --cream-2: ikincil metin */
+  --color-stone-400: #a99f8b; /* A3 --cream-3: yardımcı metin */
+  --color-stone-500: #9a917f; /* A3 placeholder, pul göstergesi çerçevesi */
+
+  /* gold: düğme degradesi için koyu ve açık uçlar */
+  --color-gold-600: #a8892a; /* A3 --gold-dk */
+  --color-gold-200: #f3dc8e; /* A3 altın düğme kenarlığı */
+
+  /* bordo: seçili/ikincil eylem degradesi */
+  --color-bordo-550: #9a3544; /* A3 --bordo-top */
+  --color-bordo-400: #b45466; /* A3 --bordo-bd  */
+
+  /* status */
+  --color-error-400: #e58a9a; /* A3 --err (night-900 üzerinde 7.1:1) */
+  --color-danger-500: #e05252; /* oyun içi zamanlayıcı acil durumu (index.css timer-urgent ile aynı) */
+
+  /* koyu mürekkep: altın yüzey üzerindeki metin */
+  --color-ink-900: #1a110b; /* A3 altın düğme metni (altın üstünde ≥5.5:1) */
+}
+
+/* ------------------------------------------------------------------ */
+/* 2) SEMANTIC TOKENS — bileşenler yalnızca bunları kullanmalı         */
+/* ------------------------------------------------------------------ */
+@theme static {
+  /* --- Surfaces --- */
+  --color-surface-page: var(--color-night-900); /* A3 ana zemin */
+  --color-surface-page-deep: var(--color-night-950); /* mevcut uygulamanın html zemini (3.3'te page ile birleştirilecek) */
+  --color-surface-raised: var(--color-night-800); /* kart, seçenek, kurallar penceresi (A3 #1a2033 ≈ night-800) */
+  --color-surface-hover: var(--color-night-750);
+  --color-surface-input: var(--color-night-950); /* A3 input zemini #0f1320 ≈ night-950 */
+  --color-surface-overlay: var(--color-night-950); /* scrim: bg-surface-overlay/80 */
+  --color-surface-wood: var(--color-walnut-700); /* ahşap: yalnızca seçili alanlar */
+  --color-surface-wood-light: var(--color-walnut-600);
+  --color-surface-wood-dark: var(--color-walnut-800);
+  --color-surface-selected: var(--color-bordo-600);
+  --color-surface-selected-top: var(--color-bordo-550);
+
+  /* --- Text --- */
+  --color-fg-primary: var(--color-cream-100);
+  --color-fg-prose: var(--color-cream-200); /* uzun metin (kurallar) */
+  --color-fg-secondary: var(--color-stone-300);
+  --color-fg-muted: var(--color-stone-400);
+  --color-fg-placeholder: var(--color-stone-500);
+  --color-fg-accent: var(--color-gold-400);
+  --color-fg-on-gold: var(--color-ink-900);
+  --color-fg-on-action: var(--color-cream-100);
+
+  /* --- Interactive actions (A3 hiyerarşisi: altın > bordo > çerçeveli) --- */
+  --color-action-primary-from: var(--color-gold-400);
+  --color-action-primary: var(--color-gold-500);
+  --color-action-primary-to: var(--color-gold-600);
+  --color-action-primary-border: var(--color-gold-200);
+  --color-action-secondary-from: var(--color-bordo-550);
+  --color-action-secondary: var(--color-bordo-600);
+  --color-action-secondary-hover: var(--color-bordo-500);
+  --color-action-secondary-border: var(--color-bordo-400);
+  --color-action-tertiary-border: var(--color-gold-600);
+  --color-action-tertiary-border-hover: var(--color-gold-500);
+  --color-action-tertiary-fg: var(--color-gold-400);
+
+  /* --- Lines / borders --- */
+  --color-line-subtle: rgb(240 230 210 / 0.18);
+  --color-line-control: var(--color-night-400);
+  --color-line-control-hover: var(--color-night-300);
+  --color-line-selected: var(--color-gold-500);
+  --color-line-accent: var(--color-gold-600);
+  --color-line-focus: var(--color-gold-400);
+  --color-line-indicator: var(--color-stone-500); /* pul göstergesi (seçili değil) */
+
+  /* --- Status --- */
+  --color-status-error-fg: var(--color-error-400);
+  --color-status-error-border: var(--color-error-400);
+  --color-status-danger: var(--color-danger-500);
+  --color-status-success-fg: var(--color-gold-400); /* A3: başarı mesajı altın */
+}
+
+/* ------------------------------------------------------------------ */
+/* TYPOGRAPHY                                                          */
+/* ------------------------------------------------------------------ */
+@theme static {
+  /*
+   * Hedef aileler (A3). Self-host edilene kadar mevcut --font-display / --font-body yığınına düşer,
+   * bu yüzden bugün bu değişkenleri kullanan bir şey yoktur. Plan: DESIGN.md §Font stratejisi.
+   */
+  --font-brand: 'Fraunces', var(--font-display); /* başlıklar */
+  --font-ui: 'Inter', var(--font-body); /* gövde / arayüz */
+  --font-code: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; /* oda kodu */
+
+  /* Boyut + satır yüksekliği çiftleri (A3). Tailwind varsayılan text-* ölçeğine dokunmaz. */
+  --text-display-xl: 4.25rem; /* 68px masaüstü h1 */
+  --text-display-xl--line-height: 1.04;
+  --text-display-lg: 3.375rem; /* 54px tablet h1 */
+  --text-display-lg--line-height: 1.04;
+  --text-display-md: 2.5rem; /* 40px mobil h1 */
+  --text-display-md--line-height: 1.05;
+  --text-heading-lg: 1.875rem; /* 30px h2 */
+  --text-heading-lg--line-height: 1.15;
+  --text-heading-md: 1.625rem; /* 26px mobil h2 */
+  --text-heading-md--line-height: 1.15;
+  --text-body-lg: 1.125rem; /* 18px slogan */
+  --text-body-lg--line-height: 1.55;
+  --text-body: 1rem; /* 16px input, düğme */
+  --text-body--line-height: 1.5;
+  --text-ui: 0.9375rem; /* 15px seçenek başlığı */
+  --text-ui--line-height: 1.25;
+  --text-ui-sm: 0.875rem; /* 14px etiket, yardım */
+  --text-ui-sm--line-height: 1.6;
+  --text-caption: 0.84375rem; /* 13.5px hata, alt bilgi */
+  --text-caption--line-height: 1.4;
+  --text-micro: 0.78125rem; /* 12.5px seçenek alt etiketi — okunabilirlik alt sınırı 12px */
+  --text-micro--line-height: 1.3;
+
+  /* Ağırlıklar: Tailwind font-weight-* kullanılır; A3 yalnızca 400/500/600/700 kullanır. */
+  --tracking-display: -0.02em; /* h1 */
+  --tracking-heading: -0.01em; /* h2 */
+  --tracking-code: 0.3em; /* oda kodu (mono) */
+}
+
+/* ------------------------------------------------------------------ */
+/* SPACING & LAYOUT — Tailwind --spacing (0.25rem) tabanı korunur       */
+/* ------------------------------------------------------------------ */
+@theme static {
+  /* Ölçek: 4px tabanı (p-1 = 4px). A3'teki yaygın adımlar: 8, 10, 12, 16, 20, 24, 26, 32, 40, 48, 56. */
+  --container-page: 80rem; /* 1280px: max-w-page */
+  --breakpoint-desk: 68.8125rem; /* 1101px: A3 geniş masaüstü (`desk:` varyantı). Arbitrary `min-[1101px]:` yerine bunu kullanın: `md:` ile sıralaması garantidir. */
+  --layout-gutter-mobile: 1.25rem; /* 20px  (<768) */
+  --layout-gutter-tablet: 2.5rem; /* 40px  (768–1100) */
+  --layout-gutter-desktop: 6rem; /* 96px  (>1100) */
+  --layout-topbar-mobile: 4rem; /* 64px */
+  --layout-topbar-desktop: 5.5rem; /* 88px */
+  --layout-column-gap: 5rem; /* 80px iki sütun arası */
+  --size-touch-min: 2.75rem; /* 44px minimum dokunma hedefi */
+  --size-control: 3.125rem; /* 50px input */
+  --size-button: 3.375rem; /* 54px düğme */
+}
+
+/* ------------------------------------------------------------------ */
+/* RADIUS                                                              */
+/* ------------------------------------------------------------------ */
+@theme static {
+  --radius-control-sm: 0.625rem; /* 10px ikon düğmesi */
+  --radius-control: 0.75rem; /* 12px input, seçenek, düğme */
+  --radius-panel: 1rem; /* 16px hane çerçevesi */
+  --radius-dialog: 1.125rem; /* 18px kurallar penceresi */
+  --radius-rail: 0.3125rem; /* 5px ahşap çubuk */
+  --radius-pill: 9999px; /* pul göstergesi */
+}
+
+/* ------------------------------------------------------------------ */
+/* SHADOW                                                              */
+/* ------------------------------------------------------------------ */
+@theme static {
+  --shadow-plate: inset 0 1px 0 rgb(255 255 255 / 0.18), inset 0 0 0 1px rgb(0 0 0 / 0.3), 0 18px 40px rgb(0 0 0 / 0.4);
+  --shadow-rail: inset 0 1px 0 rgb(255 255 255 / 0.16), 0 0 0 1px rgb(0 0 0 / 0.35);
+  --shadow-button-gold: inset 0 1px 0 rgb(255 255 255 / 0.4), 0 6px 16px rgb(0 0 0 / 0.35);
+  --shadow-option-selected: inset 0 0 0 1px rgb(230 199 104 / 0.5);
+  --shadow-dialog: 0 0 0 1px rgb(230 199 104 / 0.5), 0 30px 70px rgb(0 0 0 / 0.6);
+}
+
+/* ------------------------------------------------------------------ */
+/* WOOD SURFACES (Aşama 3.4) — yalnızca DESIGN.md §3.3'teki seçili alanlar: hane çerçevesi, ayırıcı çubuk */
+/* Kullanım: `bg-wood`, `bg-wood-rail`. Damar dokusu hafif, düşük kontrastlı çizgilerdir.                  */
+/* ------------------------------------------------------------------ */
+@theme static {
+  --background-image-wood:
+    repeating-linear-gradient(92deg, rgb(255 255 255 / 0.025) 0 2px, transparent 2px 9px, rgb(0 0 0 / 0.08) 9px 11px, transparent 11px 23px),
+    linear-gradient(to bottom, var(--color-surface-wood-light), var(--color-surface-wood) 45%, var(--color-surface-wood-dark));
+  --background-image-wood-rail:
+    repeating-linear-gradient(92deg, rgb(255 255 255 / 0.025) 0 2px, transparent 2px 9px, rgb(0 0 0 / 0.08) 9px 11px, transparent 11px 23px),
+    linear-gradient(to bottom, var(--color-surface-wood-light), var(--color-surface-wood-dark));
+}
+
+/* ------------------------------------------------------------------ */
+/* BORDER, MOTION, FOCUS, Z-INDEX, STATE                               */
+/* ------------------------------------------------------------------ */
+@theme static {
+  /* Border kalınlıkları */
+  --border-width-hairline: 1px;
+  --border-width-strong: 2px;
+
+  /* Motion (A3). Reduced-motion index.css'teki global kural ile yönetilir. */
+  --duration-fast: 150ms; /* hover, renk geçişleri */
+  --duration-base: 350ms; /* glow, görünürlük */
+  --duration-spin: 800ms; /* spinner */
+  --duration-spin-reduced: 2400ms;
+  --ease-standard: ease;
+  --ease-out-soft: ease-out;
+
+  /* Focus (A3: 3px altın halka, 3px offset; input'ta 3px glow) */
+  --focus-ring-width: 3px;
+  --focus-ring-offset: 3px;
+  --focus-ring-color: var(--color-gold-400);
+  --focus-glow: 0 0 0 3px rgb(230 199 104 / 0.4);
+  --focus-glow-error: 0 0 0 3px rgb(229 138 154 / 0.4);
+
+  /* Z-index (mevcut kullanımla hizalı: z-10, z-30, z-40, z-50) */
+  --z-raised: 10; /* tahta etiketleri */
+  --z-popover: 30; /* reaksiyon menüsü, yapışkan oyun çubuğu */
+  --z-overlay: 40; /* zar arenası, modal/scrim */
+  --z-toast: 50; /* toast, Mars kutlaması */
+
+  /* Durum */
+  --opacity-disabled: 0.5;
+}

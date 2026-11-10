@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
-import { Bot, Dices, Users, BookOpen, Volume2, VolumeX, Share2, Sparkles } from 'lucide-react';
+import { Bot, BookOpen, Volume2, VolumeX } from 'lucide-react';
 import { z } from 'zod';
 import { createBotRoom, createRoom } from '../api/rooms';
 import { ApiError } from '../api/client';
@@ -10,7 +9,8 @@ import { savePlayerToken } from '../lib/session';
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from '../config/branding';
 import { useUiStore } from '../store/uiStore';
 import RulesModal from '../components/RulesModal';
-import OptionGroup from '../components/OptionGroup';
+import { Button, IconButton, OptionGroup, TextField } from '../components/ui';
+import { BoardPlate, BrandMark, WoodRail } from '../components/home/HomeDecor';
 import type { BotDifficulty } from '../types/game';
 
 const nameSchema = z
@@ -25,22 +25,31 @@ const codeSchema = z
   .regex(/^[a-zA-Z0-9]{6,8}$/, 'Oda kodu 6-8 karakterli harf ve rakamlardan oluşur.');
 
 const BEST_OF_OPTIONS = [
-  { value: 1, label: 'Tek El', sub: '1 Puan' },
-  { value: 3, label: '3 El', sub: '2 Puana' },
-  { value: 5, label: '5 El', sub: '3 Puana' },
+  { value: 1, label: 'Tek El', hint: '1 Puan' },
+  { value: 3, label: '3 El', hint: '2 Puana' },
+  { value: 5, label: '5 El', hint: '3 Puana' },
 ];
 
 /** 0 = süresiz (sunucuya null gönderilir). */
 const TURN_TIMER_OPTIONS = [
-  { value: 0, label: 'Süresiz', sub: 'Rahat oyun' },
-  { value: 30, label: '30 sn', sub: 'Turnuva' },
-  { value: 15, label: '15 sn', sub: 'Hızlı mod' },
+  { value: 0, label: 'Süresiz', hint: 'Rahat oyun' },
+  { value: 30, label: '30 sn', hint: 'Turnuva' },
+  { value: 15, label: '15 sn', hint: 'Hızlı mod' },
 ];
 
-const BOT_DIFFICULTY_OPTIONS: { value: BotDifficulty; label: string; sub: string }[] = [
-  { value: 'Easy', label: 'Kolay', sub: 'Çırak Bot' },
-  { value: 'Master', label: 'Usta', sub: 'Usta Bot' },
+const BOT_DIFFICULTY_OPTIONS: { value: BotDifficulty; label: string; hint: string }[] = [
+  { value: 'Easy', label: 'Kolay', hint: 'Çırak Bot' },
+  { value: 'Master', label: 'Usta', hint: 'Usta Bot' },
 ];
+
+const HOW_TO_STEPS = [
+  { title: 'Odayı Kur & Paylaş', text: 'Adını yazıp odayı oluştur, davet linkini arkadaşına gönder.' },
+  { title: 'İndir, Sonra Topla', text: 'Önce hanelerdeki pulları son pula kadar indir, ardından 15 pulu topla.' },
+  { title: 'Çift Zar & Mars', text: 'Çift zar 2×zar hamle verir; rakip indirmedeyken bitirirsen Mars (2 puan)!' },
+];
+
+const sectionHeading =
+  'mb-4.5 font-brand text-heading-md font-medium tracking-heading text-fg-primary md:mb-5.5 md:text-heading-lg';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -97,231 +106,172 @@ export default function HomePage() {
     navigate(`/oda/${parsed.data.toUpperCase()}`);
   };
 
+  const pending = createMutation.isPending;
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-4xl flex-col items-center px-4 py-8 md:py-10">
-      <div className="mb-2 flex w-full justify-end gap-2">
-        <button
-          type="button"
-          onClick={toggleSound}
-          aria-label={soundEnabled ? 'Sesi kapat' : 'Sesi aç'}
-          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-night-600 p-2.5 text-cream-300 hover:bg-night-800"
-        >
-          {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-        </button>
-        <button
-          type="button"
-          onClick={() => setRulesOpen(true)}
-          className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-night-600 px-4 py-2.5 text-sm text-cream-300 hover:bg-night-800"
-        >
-          <BookOpen size={16} aria-hidden="true" />
-          Kurallar
-        </button>
-      </div>
-
-      <motion.header
-        initial={{ opacity: 0, y: -16 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-8 text-center"
-      >
-        <div
-          aria-hidden="true"
-          className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl border-2 border-gold-500/45 bg-gradient-to-br from-walnut-600 via-walnut-800 to-walnut-900 shadow-2xl"
-        >
-          <Dices size={40} className="text-gold-400" />
-        </div>
-        <h1 className="font-display text-4xl font-bold tracking-tight text-cream-50 md:text-5xl">
-          {PRODUCT_NAME}
-        </h1>
-        <p className="mt-3 max-w-md text-sm text-cream-300 md:text-base">{PRODUCT_TAGLINE}</p>
-      </motion.header>
-
-      <div className="grid w-full gap-6 md:grid-cols-2">
-        <motion.section
-          initial={{ opacity: 0, x: -16 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.1 }}
-          aria-labelledby="create-room-heading"
-          className="rounded-2xl border border-gold-500/20 bg-gradient-to-b from-night-800 to-night-900 p-6 shadow-xl"
-        >
-          <h2
-            id="create-room-heading"
-            className="mb-4 flex items-center gap-2 font-display text-lg text-gold-400"
-          >
-            <Dices size={20} aria-hidden="true" />
-            Oda Oluştur
-          </h2>
-          <form onSubmit={handleCreate} className="space-y-4">
-            <div>
-              <label htmlFor="create-name" className="mb-1.5 block text-sm text-cream-300">
-                Oyuncu adın
-              </label>
-              <input
-                id="create-name"
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
-                maxLength={30}
-                placeholder="Örn. Ayşe"
-                className="w-full rounded-xl border border-night-600 bg-night-950/80 px-4 py-3 text-cream-50 placeholder:text-cream-400/50"
+    <>
+      {/*
+        Yeni fontlar (Fraunces / Inter / IBM Plex Mono) yalnızca bu sayfanın kapsamındadır: html/body font-family
+        değişmedi, oda ve oyun ekranları mevcut yazı tipini korur.
+      */}
+      <div className="flex min-h-screen flex-col bg-surface-page font-ui text-fg-primary">
+        <div className="mx-auto flex w-full max-w-page flex-1 flex-col px-5 md:px-10 desk:px-24">
+          <div className="flex h-16 items-center justify-between md:h-22">
+            <BrandMark />
+            <div className="flex gap-2">
+              <IconButton
+                label={soundEnabled ? 'Sesi kapat' : 'Sesi aç'}
+                icon={soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                onClick={toggleSound}
               />
-              {createError && (
-                <p role="alert" className="mt-1.5 text-xs text-rose-400">
-                  {createError}
-                </p>
-              )}
+              <Button variant="ghost" size="sm" icon={<BookOpen size={18} />} onClick={() => setRulesOpen(true)}>
+                Kurallar
+              </Button>
             </div>
-            <fieldset>
-              <legend className="mb-1.5 block text-sm text-cream-300">Oyun formatı</legend>
-              <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Oyun formatı">
-                {BEST_OF_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={bestOf === option.value}
-                    onClick={() => setBestOf(option.value)}
-                    className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
-                      bestOf === option.value
-                        ? 'border-gold-500 bg-bordo-600 text-cream-50 shadow-md'
-                        : 'border-night-600 bg-night-900 text-cream-300 hover:bg-night-700'
-                    }`}
+          </div>
+
+          <header className="flex items-center justify-between gap-10 pt-3 pb-6.5 md:pt-7 md:pb-13">
+            <div>
+              <div aria-hidden="true" className="mb-4.5 h-0.5 w-12 bg-action-primary md:mb-6.5" />
+              <h1 className="font-brand text-display-md font-medium tracking-display text-fg-primary md:text-display-lg desk:text-display-xl">
+                {PRODUCT_NAME}
+              </h1>
+              <p className="mt-3.5 max-w-115 text-body text-fg-secondary md:mt-5.5 md:text-body-lg">{PRODUCT_TAGLINE}</p>
+            </div>
+            <BoardPlate className="w-75 shrink-0 desk:w-110" />
+          </header>
+
+          <WoodRail />
+
+          <main className="grid grid-cols-1 gap-10 pt-8 pb-10 md:grid-cols-2 md:gap-x-11 md:pt-12 md:pb-14 desk:gap-x-20">
+            <section aria-labelledby="create-room-heading">
+              <h2 id="create-room-heading" className={sectionHeading}>
+                Oda Oluştur
+              </h2>
+              <form onSubmit={handleCreate} className="flex flex-col gap-5.5 md:gap-6">
+                <TextField
+                  id="create-name"
+                  label="Oyuncu adın"
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  maxLength={30}
+                  placeholder="Örn. Ayşe"
+                  error={createError}
+                />
+                <OptionGroup
+                  legend="Oyun formatı"
+                  name="best-of"
+                  options={BEST_OF_OPTIONS}
+                  value={bestOf}
+                  onChange={setBestOf}
+                />
+                <OptionGroup
+                  legend="Hamle süresi"
+                  name="turn-timer"
+                  options={TURN_TIMER_OPTIONS}
+                  value={turnTimer}
+                  onChange={setTurnTimer}
+                />
+                <Button
+                  type="submit"
+                  fullWidth
+                  disabled={pending}
+                  loading={pending && createMutation.variables === 'friend'}
+                  loadingLabel="Oda oluşturuluyor…"
+                >
+                  Oda Oluştur
+                </Button>
+
+                {/* Arkadaş beklemeden: aynı ad, format ve süreyle yapay zekâya karşı. */}
+                <div className="flex flex-col gap-4 border-t border-line-subtle pt-6">
+                  <p className="flex items-center gap-2.5 text-body font-semibold text-fg-primary">
+                    <Bot size={20} className="text-fg-accent" aria-hidden="true" />
+                    Arkadaşın yok mu? Hemen dene
+                  </p>
+                  <OptionGroup
+                    legend="Bot zorluğu"
+                    name="bot-difficulty"
+                    options={BOT_DIFFICULTY_OPTIONS}
+                    value={botDifficulty}
+                    onChange={setBotDifficulty}
+                    columns={2}
+                  />
+                  <Button
+                    variant="tertiary"
+                    fullWidth
+                    icon={<Bot size={18} />}
+                    onClick={() => submitCreate('bot')}
+                    disabled={pending}
+                    loading={pending && createMutation.variables === 'bot'}
+                    loadingLabel="Masa hazırlanıyor…"
                   >
-                    <span className="block font-semibold">{option.label}</span>
-                    <span aria-hidden="true" className="block text-[10px] opacity-80">{option.sub}</span>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-            <OptionGroup
-              legend="Hamle süresi"
-              options={TURN_TIMER_OPTIONS}
-              value={turnTimer}
-              onChange={setTurnTimer}
-            />
-            <button
-              type="submit"
-              disabled={createMutation.isPending}
-              className="min-h-11 w-full rounded-xl bg-gradient-to-r from-bordo-600 to-bordo-700 px-4 py-3 font-semibold text-cream-50 shadow-lg transition-transform hover:scale-[1.01] disabled:opacity-60"
-            >
-              {createMutation.isPending && createMutation.variables === 'friend'
-                ? 'Oda oluşturuluyor…'
-                : 'Oda Oluştur'}
-            </button>
+                    Yapay Zekâya Karşı Oyna
+                  </Button>
+                </div>
+              </form>
+            </section>
 
-            {/* Arkadaş beklemeden: aynı ad, format ve süreyle yapay zekâya karşı. */}
-            <div className="rounded-xl border border-gold-500/20 bg-night-950/50 p-3">
-              <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-cream-100">
-                <Bot size={16} className="text-gold-400" aria-hidden="true" />
-                Arkadaşın yok mu? Hemen dene
-              </p>
-              <OptionGroup
-                legend="Bot zorluğu"
-                options={BOT_DIFFICULTY_OPTIONS}
-                value={botDifficulty}
-                onChange={setBotDifficulty}
-                columns={2}
-              />
-              <button
-                type="button"
-                onClick={() => submitCreate('bot')}
-                disabled={createMutation.isPending}
-                className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-gold-500/50 bg-night-700 px-4 py-3 font-semibold text-gold-400 transition-colors hover:bg-night-600 disabled:opacity-60"
-              >
-                <Bot size={18} aria-hidden="true" />
-                {createMutation.isPending && createMutation.variables === 'bot'
-                  ? 'Masa hazırlanıyor…'
-                  : 'Yapay Zekâya Karşı Oyna'}
-              </button>
-            </div>
-          </form>
-        </motion.section>
+            <div className="flex flex-col gap-10 md:gap-13">
+              <section aria-labelledby="join-room-heading">
+                <h2 id="join-room-heading" className={sectionHeading}>
+                  Odaya Katıl
+                </h2>
+                <form onSubmit={handleJoin} className="flex flex-col gap-4.5">
+                  <TextField
+                    id="join-code"
+                    label="Oda kodu"
+                    mono
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                    maxLength={8}
+                    placeholder="Örn. 7K9M2X"
+                    autoCapitalize="characters"
+                    aria-describedby="join-code-help"
+                    error={joinError}
+                  />
+                  <p id="join-code-help" className="text-ui-sm text-fg-muted">
+                    Arkadaşının paylaştığı bağlantıya tıkladıysan doğrudan odaya yönlendirilirsin. Elinde yalnızca kod
+                    varsa buraya yaz.
+                  </p>
+                  <Button type="submit" variant="secondary" fullWidth>
+                    Odaya Katıl
+                  </Button>
+                </form>
+              </section>
 
-        <motion.section
-          initial={{ opacity: 0, x: 16 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.15 }}
-          aria-labelledby="join-room-heading"
-          className="rounded-2xl border border-gold-500/20 bg-gradient-to-b from-night-800 to-night-900 p-6 shadow-xl"
-        >
-          <h2
-            id="join-room-heading"
-            className="mb-4 flex items-center gap-2 font-display text-lg text-gold-400"
-          >
-            <Users size={20} aria-hidden="true" />
-            Odaya Katıl
-          </h2>
-          <form onSubmit={handleJoin} className="space-y-4">
-            <div>
-              <label htmlFor="join-code" className="mb-1.5 block text-sm text-cream-300">
-                Oda kodu
-              </label>
-              <input
-                id="join-code"
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                maxLength={8}
-                placeholder="Örn. 7K9M2X"
-                autoCapitalize="characters"
-                className="w-full rounded-xl border border-night-600 bg-night-950/80 px-4 py-3 font-mono text-lg tracking-[0.3em] text-cream-50 placeholder:tracking-normal placeholder:text-cream-400/50"
-              />
-              {joinError && (
-                <p role="alert" className="mt-1.5 text-xs text-rose-400">
-                  {joinError}
-                </p>
-              )}
+              {/* 3 Adımda Nasıl Oynanır rehberi */}
+              <section aria-labelledby="how-to-heading" className="border-t border-line-subtle pt-6.5">
+                <h2 id="how-to-heading" className={`${sectionHeading} md:mb-5`}>
+                  Nasıl oynanır
+                </h2>
+                <ol className="flex flex-col gap-5">
+                  {HOW_TO_STEPS.map((step, index) => (
+                    <li key={step.title} className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-start">
+                      <span
+                        aria-hidden="true"
+                        className="flex size-9 items-center justify-center rounded-pill bg-linear-to-b from-action-primary-from to-action-primary-to font-brand text-xl font-semibold text-fg-on-gold ring-3 ring-surface-selected"
+                      >
+                        {index + 1}
+                      </span>
+                      <div>
+                        <strong className="mb-1 block text-ui font-semibold text-fg-primary">{step.title}</strong>
+                        <span className="text-ui-sm text-fg-secondary">{step.text}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </section>
             </div>
-            <p className="text-xs leading-relaxed text-cream-400">
-              Arkadaşının paylaştığı bağlantıya tıkladıysan doğrudan odaya yönlendirilirsin. Elinde
-              yalnızca kod varsa buraya yaz.
-            </p>
-            <button
-              type="submit"
-              className="min-h-11 w-full rounded-xl border border-gold-500/40 bg-night-700 px-4 py-3 font-semibold text-gold-400 transition-colors hover:bg-night-600"
-            >
-              Odaya Katıl
-            </button>
-          </form>
-        </motion.section>
+          </main>
+
+          <footer className="mt-auto border-t border-line-subtle pt-5.5 pb-7 text-center text-caption text-fg-muted">
+            Üyelik gerekmez — misafir olarak oyna. Zarlar sunucuda güvenle atılır.
+          </footer>
+        </div>
       </div>
 
-      {/* 3 Adımda Nasıl Oynanır rehberi */}
-      <section
-        aria-label="Nasıl oynanır"
-        className="mt-8 grid w-full grid-cols-1 gap-3 sm:grid-cols-3"
-      >
-        <div className="flex items-start gap-3 rounded-xl border border-night-700 bg-night-900/60 p-3.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-walnut-700 font-display text-sm font-bold text-gold-400">
-            1
-          </span>
-          <div className="text-xs text-cream-300">
-            <strong className="block text-cream-100">Odayı Kur & Paylaş</strong>
-            Adını yazıp odayı oluştur, davet linkini arkadaşına gönder.
-          </div>
-        </div>
-        <div className="flex items-start gap-3 rounded-xl border border-night-700 bg-night-900/60 p-3.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-walnut-700 font-display text-sm font-bold text-gold-400">
-            <Share2 size={15} aria-hidden="true" />
-          </span>
-          <div className="text-xs text-cream-300">
-            <strong className="block text-cream-100">İndir, Sonra Topla</strong>
-            Önce hanelerdeki pulları son pula kadar indir, ardından 15 pulu topla.
-          </div>
-        </div>
-        <div className="flex items-start gap-3 rounded-xl border border-night-700 bg-night-900/60 p-3.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-walnut-700 font-display text-sm font-bold text-gold-400">
-            <Sparkles size={15} aria-hidden="true" />
-          </span>
-          <div className="text-xs text-cream-300">
-            <strong className="block text-cream-100">Çift Zar & Mars</strong>
-            Çift zar 2×zar hamle verir; rakip indirmedeyken bitirirsen Mars (2 puan)!
-          </div>
-        </div>
-      </section>
-
-      <footer className="mt-8 text-center text-xs text-cream-400/60">
-        Üyelik gerekmez — misafir olarak oyna. Zarlar sunucuda güvenle atılır.
-      </footer>
-
+      {/* Mevcut modal bu aşamada değişmez; yeni font kapsamının dışında, eski görünümüyle kalır. */}
       <RulesModal />
-    </main>
+    </>
   );
 }
