@@ -34,6 +34,8 @@ function room(players: PlayerDto[], extra: Partial<RoomSnapshotDto> = {}): RoomS
 
 function renderLobby(snapshot: RoomSnapshotDto, me: string | null, opts: { spectator?: boolean; onPlayBot?: (d: 'Easy' | 'Master') => void } = {}) {
   useGameStore.getState().setMyPlayerId(me);
+  // 3.9C: başlatma eylemi yalnızca bağlantı 'connected' iken etkin; bu fixture bağlı bir oturumu temsil eder.
+  useGameStore.getState().setConnectionStatus('connected');
   const onStartMatch = vi.fn();
   render(<LobbyView snapshot={snapshot} onStartMatch={onStartMatch} {...opts} />);
   return { onStartMatch };

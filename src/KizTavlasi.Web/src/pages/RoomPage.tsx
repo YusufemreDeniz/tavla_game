@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { BookOpen, DoorOpen, Eye, Volume2, VolumeX, Zap } from 'lucide-react';
+import { BookOpen, DoorOpen, Eye, RefreshCw, Volume2, VolumeX, Zap } from 'lucide-react';
 import { z } from 'zod';
 import {
   createBotRoom,
@@ -29,7 +29,8 @@ import ConnectionBadge from '../components/ConnectionBadge';
 import RulesModal from '../components/RulesModal';
 import ShareLinkCard from '../components/ShareLinkCard';
 import { FloatingReactions } from '../components/ReactionsBar';
-import { Button, LoadingScreen, StateScreen, TextField } from '../components/ui';
+import { Button, LoadingScreen, Notice, StateScreen, TextField } from '../components/ui';
+import { RoomHeader } from '../components/room/RoomHeader';
 import LobbyView from './LobbyView';
 import GameView from './GameView';
 import { PRODUCT_NAME } from '../config/branding';
@@ -371,75 +372,102 @@ function ConnectedRoom({
     [snapshot, myPlayerId, roomCode, token, navigate, showToast],
   );
 
+  /**
+   * Komut katmanı koruması: bağlantı 'connected' değilse StartMatch gönderilmez. Durum çağrı ANINDA store'dan okunur
+   * (render'daki değer değil) → stale closure olmaz. Sunucu yetkilendirmesinin yerini almaz; UI'daki disabled ile aynı kaynağı kullanır.
+   */
+  const handleStartMatch = useCallback(() => {
+    if (useGameStore.getState().connectionStatus !== 'connected') return Promise.resolve();
+    return invoke((h) => h.startMatch());
+  }, [invoke]);
+
   const matchActive = snapshot?.status === 'Playing' || snapshot?.status === 'Completed';
 
+  // Lobi (inLobby ile aynı koşul) A3 başlığını kullanır; oyun durumları mevcut başlığı AYNEN korur.
+  const lobbyHeader = snapshot?.status === 'Waiting' || snapshot?.status === 'InLobby';
+
   const header = useMemo(
-    () => (
-      <header className="mb-3 flex items-center justify-between gap-2 md:mb-4">
-        <div className="flex items-center gap-2.5">
-          {/* Oyun sürerken oda kodu ve "Bağlı" rozeti gizlenir; bağlantı sorunu olursa rozet görünür. */}
-          {(!matchActive || connectionStatus !== 'connected') && (
-            <>
-              <span className="rounded-lg border border-gold-500/30 bg-night-800 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-gold-400">
-                {roomCode}
+    () =>
+      lobbyHeader ? (
+        <RoomHeader
+          roomCode={roomCode}
+          connectionStatus={connectionStatus}
+          spectatorCount={spectatorCount}
+          spectator={spectator}
+          fastMode={fastMode}
+          soundEnabled={soundEnabled}
+          onToggleFastMode={toggleFastMode}
+          onToggleSound={toggleSound}
+          onOpenRules={() => setRulesOpen(true)}
+          onLeave={handleLeave}
+        />
+      ) : (
+        <header className="mb-3 flex items-center justify-between gap-2 md:mb-4">
+          <div className="flex items-center gap-2.5">
+            {/* Oyun sürerken oda kodu ve "Bağlı" rozeti gizlenir; bağlantı sorunu olursa rozet görünür. */}
+            {(!matchActive || connectionStatus !== 'connected') && (
+              <>
+                <span className="rounded-lg border border-gold-500/30 bg-night-800 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-gold-400">
+                  {roomCode}
+                </span>
+                <ConnectionBadge status={connectionStatus} />
+              </>
+            )}
+            {spectatorCount > 0 && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-night-600 px-2 py-0.5 text-[11px] text-cream-300"
+                aria-label={`${spectatorCount} izleyici`}
+                title="Maçı izleyenler"
+              >
+                <Eye size={12} aria-hidden="true" />
+                {spectatorCount}
               </span>
-              <ConnectionBadge status={connectionStatus} />
-            </>
-          )}
-          {spectatorCount > 0 && (
-            <span
-              className="inline-flex items-center gap-1 rounded-full border border-night-600 px-2 py-0.5 text-[11px] text-cream-300"
-              aria-label={`${spectatorCount} izleyici`}
-              title="Maçı izleyenler"
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={toggleFastMode}
+              aria-label={fastMode ? 'Normal animasyon hızına geç' : 'Hızlı animasyon modunu aç'}
+              aria-pressed={fastMode}
+              title={fastMode ? 'Hızlı animasyon açık' : 'Normal animasyon hızı'}
+              className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border p-2.5 transition-colors ${
+                fastMode
+                  ? 'border-gold-500/60 bg-gold-500/15 text-gold-400'
+                  : 'border-night-600 text-cream-300 hover:bg-night-800'
+              }`}
             >
-              <Eye size={12} aria-hidden="true" />
-              {spectatorCount}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={toggleFastMode}
-            aria-label={fastMode ? 'Normal animasyon hızına geç' : 'Hızlı animasyon modunu aç'}
-            aria-pressed={fastMode}
-            title={fastMode ? 'Hızlı animasyon açık' : 'Normal animasyon hızı'}
-            className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border p-2.5 transition-colors ${
-              fastMode
-                ? 'border-gold-500/60 bg-gold-500/15 text-gold-400'
-                : 'border-night-600 text-cream-300 hover:bg-night-800'
-            }`}
-          >
-            <Zap size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={toggleSound}
-            aria-label={soundEnabled ? 'Sesi kapat' : 'Sesi aç'}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-night-600 p-2.5 text-cream-300 hover:bg-night-800"
-          >
-            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setRulesOpen(true)}
-            aria-label="Kuralları göster"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-night-600 p-2.5 text-cream-300 hover:bg-night-800"
-          >
-            <BookOpen size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={handleLeave}
-            aria-label={spectator ? 'İzlemeyi bırak' : 'Odadan çık'}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-bordo-600/50 p-2.5 text-rose-400 hover:bg-bordo-700/30"
-          >
-            <DoorOpen size={16} />
-          </button>
-        </div>
-      </header>
-    ),
+              <Zap size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={toggleSound}
+              aria-label={soundEnabled ? 'Sesi kapat' : 'Sesi aç'}
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-night-600 p-2.5 text-cream-300 hover:bg-night-800"
+            >
+              {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRulesOpen(true)}
+              aria-label="Kuralları göster"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-night-600 p-2.5 text-cream-300 hover:bg-night-800"
+            >
+              <BookOpen size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={handleLeave}
+              aria-label={spectator ? 'İzlemeyi bırak' : 'Odadan çık'}
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-bordo-600/50 p-2.5 text-rose-400 hover:bg-bordo-700/30"
+            >
+              <DoorOpen size={16} />
+            </button>
+          </div>
+        </header>
+      ),
     [
+      lobbyHeader,
       roomCode,
       connectionStatus,
       matchActive,
@@ -471,9 +499,20 @@ function ConnectedRoom({
             >
               Ana Sayfa
             </Button>
+            {/* Hata türü istemcide ayırt edilemez: token otomatik silinmez; kullanıcı açıkça seçer.
+                onSessionInvalid yalnızca BU odanın, BU oturum türünün token'ını siler ve katılma/izleme akışına döner. */}
+            <Button variant="tertiary" onClick={onSessionInvalid}>
+              {spectator ? 'Bu Odadaki İzleme Oturumunu Sıfırla' : 'Bu Odadaki Oturumu Sıfırla'}
+            </Button>
           </>
         }
-      />
+      >
+        <p className="text-center text-ui-sm text-fg-muted">
+          {spectator
+            ? 'Tekrar Dene sorunu çözmezse izleme oturumun artık geçersiz olabilir. Oturumu sıfırlarsan bu odayı yeniden izlemeyi seçebilirsin.'
+            : 'Tekrar Dene sorunu çözmezse oturumun artık geçersiz olabilir. Oturumu sıfırlarsan oyuncu koltuğuna otomatik geri dönemezsin; oda doluysa yalnızca izleyebilirsin.'}
+        </p>
+      </StateScreen>
     );
   }
 
@@ -487,20 +526,29 @@ function ConnectedRoom({
     <main className="mx-auto min-h-screen max-w-4xl px-2.5 py-3 md:px-4 md:py-6">
       {header}
 
-      {connectionStatus === 'reconnecting' && (
-        <div
-          role="alert"
-          className="mb-3 rounded-xl border border-gold-500/40 bg-night-800 px-4 py-2.5 text-sm text-gold-400"
-        >
-          Bağlantı kesildi. Oyun durumu korunuyor, yeniden bağlanılıyor…
-        </div>
-      )}
+      {connectionStatus === 'reconnecting' &&
+        (inLobby ? (
+          <Notice
+            role="alert"
+            icon={<RefreshCw size={16} />}
+            className="mb-3 justify-start border-line-accent text-left text-fg-accent"
+          >
+            Bağlantı kesildi. Oyun durumu korunuyor, yeniden bağlanılıyor…
+          </Notice>
+        ) : (
+          <div
+            role="alert"
+            className="mb-3 rounded-xl border border-gold-500/40 bg-night-800 px-4 py-2.5 text-sm text-gold-400"
+          >
+            Bağlantı kesildi. Oyun durumu korunuyor, yeniden bağlanılıyor…
+          </div>
+        ))}
 
       {inLobby ? (
         <LobbyView
           snapshot={snapshot}
           spectator={spectator}
-          onStartMatch={() => invoke((h) => h.startMatch())}
+          onStartMatch={handleStartMatch}
           onPlayBot={spectator ? undefined : handlePlayBot}
         />
       ) : (

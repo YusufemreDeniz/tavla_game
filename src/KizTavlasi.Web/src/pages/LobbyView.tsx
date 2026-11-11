@@ -1,5 +1,6 @@
+import { useId } from 'react';
 import { Bot, Eye, Timer, Trophy } from 'lucide-react';
-import type { BotDifficulty, RoomSnapshotDto } from '../types/game';
+import type { BotDifficulty, ConnectionStatus, RoomSnapshotDto } from '../types/game';
 import { EmptySeatRow, PlayerRow } from '../components/lobby/PlayerRow';
 import { Badge, Button, Notice, Panel } from '../components/ui';
 import { useGameStore } from '../store/gameStore';
@@ -8,6 +9,15 @@ const FORMAT_LABELS: Record<number, string> = {
   1: 'Tek el — ilk eli kazanan maçı alır',
   3: '3 el üzerinden — 2 puan kazanan maçı alır',
   5: '5 el üzerinden — 3 puan kazanan maçı alır',
+};
+
+/** Başlatma eylemi bağlantı 'connected' değilken kapalıdır; kısa neden metni (connected için gösterilmez). */
+const START_BLOCKED_REASON: Record<ConnectionStatus, string> = {
+  idle: 'Sunucuya bağlanılıyor. Bağlantı kurulunca maçı başlatabilirsin.',
+  connecting: 'Sunucuya bağlanılıyor. Bağlantı kurulunca maçı başlatabilirsin.',
+  connected: '',
+  reconnecting: 'Yeniden bağlanılıyor. Bağlantı gelince maçı başlatabilirsin.',
+  disconnected: 'Bağlantı kesildi. Yeniden bağlanınca maçı başlatabilirsin.',
 };
 
 interface LobbyViewProps {
@@ -20,6 +30,10 @@ interface LobbyViewProps {
 
 export default function LobbyView({ snapshot, onStartMatch, onPlayBot, spectator = false }: LobbyViewProps) {
   const myPlayerId = useGameStore((s) => s.myPlayerId);
+  // Bağlantı durumunun TEK kaynağı store'dur (RoomPage komut katmanı da aynı değeri okur).
+  const connectionStatus = useGameStore((s) => s.connectionStatus);
+  const startReasonId = useId();
+  const canStart = connectionStatus === 'connected';
   const me = snapshot.players.find((p) => p.id === myPlayerId);
   const isHost = !spectator && (me?.isHost ?? false);
   const bothPlayersPresent = snapshot.players.length === 2;
@@ -83,9 +97,22 @@ export default function LobbyView({ snapshot, onStartMatch, onPlayBot, spectator
 
       {bothPlayersPresent &&
         (isHost ? (
-          <Button fullWidth onClick={onStartMatch}>
-            {hasBot ? 'Bota Karşı Başlat' : 'Oyunu Başlat'}
-          </Button>
+          <div className="space-y-2">
+            <Button
+              fullWidth
+              onClick={onStartMatch}
+              disabled={!canStart}
+              aria-describedby={canStart ? undefined : startReasonId}
+            >
+              {hasBot ? 'Bota Karşı Başlat' : 'Oyunu Başlat'}
+            </Button>
+            {/* Canlı bölge değil: bağlantı rozeti ve yeniden bağlanma uyarısı zaten duyuruyor. */}
+            {!canStart && (
+              <p id={startReasonId} className="text-center text-ui-sm text-fg-secondary">
+                {START_BLOCKED_REASON[connectionStatus]}
+              </p>
+            )}
+          </div>
         ) : (
           <Notice role="status" icon={spectator ? <Eye size={15} /> : undefined}>
             Oda sahibinin oyunu başlatması bekleniyor…

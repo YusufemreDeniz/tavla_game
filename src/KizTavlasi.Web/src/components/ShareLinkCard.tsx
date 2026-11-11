@@ -1,7 +1,8 @@
 import { lazy, Suspense, useState } from 'react';
-import { Check, Copy, QrCode as QrIcon, Share2 } from 'lucide-react';
+import { Check, Copy, Info, QrCode as QrIcon, Share2 } from 'lucide-react';
 import { useUiStore } from '../store/uiStore';
 import { PRODUCT_NAME } from '../config/branding';
+import { Button, IconButton, Notice, Panel } from './ui';
 
 // QR üreteci yalnızca kullanıcı açtığında yüklenir.
 const QrCode = lazy(() => import('./QrCode'));
@@ -47,62 +48,55 @@ export default function ShareLinkCard({ roomCode }: { roomCode: string }) {
   };
 
   return (
-    <div className="rounded-2xl border border-gold-500/20 bg-night-800 p-5">
-      <p className="mb-1 text-xs uppercase tracking-wider text-cream-400">Oda kodu</p>
-      <p className="mb-4 font-mono text-3xl font-bold tracking-[0.35em] text-gold-400">{roomCode}</p>
-      <p className="mb-2 break-all rounded-lg bg-night-900 px-3 py-2 font-mono text-xs text-cream-300">
-        {shareUrl}
-      </p>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={copyLink}
-          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-night-600 bg-night-700 px-4 py-2.5 text-sm font-medium text-cream-100 hover:bg-night-600"
-        >
-          {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
-          {copied ? 'Kopyalandı' : 'Linki Kopyala'}
-        </button>
-        <button
-          type="button"
-          onClick={shareLink}
-          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-bordo-600 px-4 py-2.5 text-sm font-medium text-cream-50 hover:bg-bordo-500"
-        >
-          <Share2 size={16} />
-          Paylaş
-        </button>
-        <button
-          type="button"
-          onClick={() => setQrOpen((open) => !open)}
-          aria-expanded={qrOpen}
-          aria-label={qrOpen ? 'QR kodu gizle' : 'QR kodu göster'}
-          className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border px-3 ${
-            qrOpen
-              ? 'border-gold-500/60 bg-gold-500/15 text-gold-400'
-              : 'border-night-600 bg-night-700 text-cream-100 hover:bg-night-600'
-          }`}
-        >
-          <QrIcon size={18} />
-        </button>
+    <Panel as="section" aria-labelledby="share-heading" className="font-ui shadow-plate">
+      <h2 id="share-heading" className="mb-4 font-brand text-heading-md text-fg-primary">
+        Arkadaşını davet et
+      </h2>
+
+      <p className="mb-1 text-caption tracking-wider text-fg-muted uppercase">Oda kodu</p>
+      <p className="mb-4 font-code text-heading-lg tracking-[0.35em] break-all text-fg-accent">{roomCode}</p>
+
+      <div className="space-y-2.5 rounded-control border border-line-subtle bg-surface-input p-3">
+        <p className="font-code text-ui-sm break-all text-fg-secondary">{shareUrl}</p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={copyLink}
+            className="min-w-0 flex-1"
+            icon={copied ? <Check size={16} className="text-status-success-fg" /> : <Copy size={16} />}
+          >
+            {copied ? 'Kopyalandı' : 'Linki Kopyala'}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={shareLink} className="min-w-0 flex-1" icon={<Share2 size={16} />}>
+            Paylaş
+          </Button>
+          <IconButton
+            onClick={() => setQrOpen((open) => !open)}
+            aria-expanded={qrOpen}
+            label={qrOpen ? 'QR kodu gizle' : 'QR kodu göster'}
+            icon={<QrIcon size={18} />}
+            className="aria-expanded:border-line-selected aria-expanded:bg-surface-hover"
+          />
+        </div>
       </div>
 
       {qrOpen && (
-        <div className="mt-4 flex flex-col items-center gap-2">
-          <Suspense
-            fallback={<div className="h-[168px] w-[168px] animate-pulse rounded-lg bg-night-700" />}
-          >
+        <div className="mt-4 flex flex-col items-center gap-3">
+          <Suspense fallback={<div className="h-[168px] w-[168px] animate-pulse rounded-lg bg-surface-hover" />}>
             <QrCode value={shareUrl} label={`${roomCode} odasına katılma QR kodu`} />
           </Suspense>
-          <p className="max-w-xs text-center text-xs text-cream-400">
+          <p className="max-w-xs text-center text-ui-sm text-fg-secondary">
             Telefon kamerasıyla tara, doğrudan odaya katıl.
           </p>
           {isLoopback && (
-            <p role="note" className="max-w-xs text-center text-xs text-amber-300">
+            <Notice role="note" icon={<Info size={16} />} className="max-w-xs py-3 text-ui-sm">
               Bu adres yalnızca bu bilgisayarda açılır. Telefondan taramak için sayfayı bilgisayarın
               yerel ağ adresiyle aç (ör. http://192.168.x.x:5173).
-            </p>
+            </Notice>
           )}
         </div>
       )}
-    </div>
+    </Panel>
   );
 }

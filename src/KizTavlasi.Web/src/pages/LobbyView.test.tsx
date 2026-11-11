@@ -39,6 +39,8 @@ function renderLobby(
   { me = null, spectator, onPlayBot, onStartMatch = vi.fn() }: { me?: string | null; spectator?: boolean; onPlayBot?: (d: 'Easy' | 'Master') => void; onStartMatch?: () => void } = {},
 ) {
   useGameStore.getState().setMyPlayerId(me);
+  // 3.9C: başlatma eylemi yalnızca bağlantı 'connected' iken etkin; bu karakterizasyon fixture'ı bağlı bir oturumu temsil eder.
+  useGameStore.getState().setConnectionStatus('connected');
   const utils = render(<LobbyView snapshot={snapshot} spectator={spectator} onPlayBot={onPlayBot} onStartMatch={onStartMatch} />);
   return { ...utils, onStartMatch };
 }
