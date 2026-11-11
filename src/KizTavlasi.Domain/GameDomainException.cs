@@ -30,4 +30,5 @@ public static class DomainErrorCodes
     public const string RematchNotAvailable = "REMATCH_NOT_AVAILABLE";
     public const string RoundAlreadyCompleted = "ROUND_ALREADY_COMPLETED";
     public const string NotHost = "NOT_HOST";
+    public const string SpectatorReadOnly = "SPECTATOR_READ_ONLY";
 }

@@ -36,6 +36,7 @@ Hub kural içermez; yalnızca auth, doğrulama, application service çağrısı,
 | `RematchRequested` / `RematchAccepted` / `RematchDeclined` | |
 | `ReactionReceived` | `{ fromPlayerId, emoji }` |
 | `ServerError` | `{ code, message }` |
+| `SpectatorCountChanged` | `{ roomCode, count, serverTimeUtc }` — odayı izleyen bağlantı sayısı |
 
 Tüm event payload'larında ortak zarf: `roomCode`, `stateVersion`, `serverTimeUtc`.
 
@@ -76,3 +77,29 @@ Tüm event payload'larında ortak zarf: `roomCode`, `stateVersion`, `serverTimeU
 İstemci kuralı yeniden hesaplamaz; adımları sırasıyla animasyonla oynatır ve ardından
 `GameStateUpdated` snapshot'ını uygular. `incomingStateVersion <= currentStateVersion`
 olan eventler atılır.
+
+## İzleyici (Spectator) Bağlantısı
+
+- `POST /api/rooms/{code}/watch` salt okunur izleyici JWT'si döndürür (`access=spectator`, `roomId`, `roomCode`;
+  `playerId`/`seat`/`sessionId` yoktur). İzleyiciler veritabanına yazılmaz.
+- İzleyici `JoinRoom` / `RejoinRoom` çağırabilir; odanın grubuna eklenir ve aynı `RoomSnapshotReceived` /
+  `GameStateUpdated` olaylarını alır.
+- Tüm komutlar (`StartMatch`, `RollDice`, `PlayMove`, `SendReaction`, rövanş) `SPECTATOR_READ_ONLY` ile reddedilir;
+  REST oyuncu uçları (`/state`, `/leave`, `/start`, `/rematch`) 403 döner.
+
+## Otomatik Eylemler (Bot ve Hamle Süresi)
+
+- Snapshot'ta `turnTimeLimitSeconds` (oda) ve `match.currentRound.turnDeadlineUtc` (UTC) bulunur.
+- `turnDeadlineUtc`, sunucunun sıradaki oyuncu adına hareket edeceği andır: bot için kısa "düşünme"
+  gecikmesi, süreli odada insan oyuncu için hamle süresinin sonu. İstemci yalnızca geri sayımı gösterir.
+- Otomatik eylemler istemci komutlarıyla aynı olayları üretir (`DiceRollStarted`, `DiceRollResolved`,
+  `MovePlayed`, `TurnStarted`, ...); ayrı bir event yoktur. `PlayerDto.isBot` botu işaretler.
+
+## Maç Analitiği (REST)
+
+`GET /api/rooms/{code}/stats` — oyuncu veya izleyici token'ı ile; güncel (veya yeni biten) maç için
+sunucuda hesaplanan `MatchStatsDto` döner: oyuncu başına atış sayısı, ortalama zar toplamı, çift sayısı ve
+en uzun çift serisi, boşa giden zar (atışta + hamle sonrası), indirmenin bittiği atış, mars, puan ve
+"maçın kırılma anı" (`Mars` > `PhaseShift` > `DoubleStreak` > `BigDouble` > `FastBringDown`).
+Kaynak: `DiceRolls` + `GameEvents` (`MovePlayed` payload'ındaki `WastedDiceCount`, `BringDownCompleted`,
+`RollTurnNumber`; `RoundCompleted`). Maç yoksa `MATCH_NOT_ACTIVE` (400).

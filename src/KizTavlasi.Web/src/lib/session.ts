@@ -4,6 +4,32 @@
  * ve sekme kapanınca token temizlenir.
  */
 const keyFor = (roomCode: string) => `kiztavlasi:token:${roomCode.toUpperCase()}`;
+const spectatorKeyFor = (roomCode: string) => `kiztavlasi:spectator:${roomCode.toUpperCase()}`;
+
+function safeStorage(action: () => void): void {
+  try {
+    action();
+  } catch {
+    // Gizli sekme vb. durumlarda depolama erişilemez olabilir; oturum bellekte sürer.
+  }
+}
+
+/** Salt okunur izleyici token'ı (oyuncu token'ından ayrı anahtarda). */
+export function saveSpectatorToken(roomCode: string, token: string): void {
+  safeStorage(() => sessionStorage.setItem(spectatorKeyFor(roomCode), token));
+}
+
+export function getSpectatorToken(roomCode: string): string | null {
+  try {
+    return sessionStorage.getItem(spectatorKeyFor(roomCode));
+  } catch {
+    return null;
+  }
+}
+
+export function clearSpectatorToken(roomCode: string): void {
+  safeStorage(() => sessionStorage.removeItem(spectatorKeyFor(roomCode)));
+}
 
 export function savePlayerToken(roomCode: string, token: string): void {
   sessionStorage.setItem(keyFor(roomCode), token);

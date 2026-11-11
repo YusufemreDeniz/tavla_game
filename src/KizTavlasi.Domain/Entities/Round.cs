@@ -16,6 +16,13 @@ public class Round
 
     /// <summary>Çift bonusuyla kazanılan, istenen haneden harcanabilen serbest hamle hakkı.</summary>
     public int PendingBonusPicks { get; set; }
+
+    /// <summary>
+    /// Sunucunun sıradaki oyuncu adına otomatik hareket edeceği an: bot için kısa
+    /// "düşünme" gecikmesi, süreli odada insan oyuncu için hamle süresinin sonu.
+    /// <c>null</c> = otomatik eylem yok (süresiz oda, insan oyuncu).
+    /// </summary>
+    public DateTime? TurnDeadlineUtc { get; set; }
     public DateTime? StartedAtUtc { get; set; }
     public DateTime? CompletedAtUtc { get; set; }
     public long StateVersion { get; set; }

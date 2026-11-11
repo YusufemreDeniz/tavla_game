@@ -1,13 +1,41 @@
 import { apiRequest } from './client';
 import type {
+  BotDifficulty,
   CreateRoomResult,
   JoinRoomResult,
+  MatchStatsDto,
   PublicConfigDto,
   RoomSnapshotDto,
+  WatchRoomResult,
 } from '../types/game';
 
-export function createRoom(displayName: string, bestOf: number): Promise<CreateRoomResult> {
-  return apiRequest('/api/rooms', { method: 'POST', body: { displayName, bestOf } });
+export function createRoom(
+  displayName: string,
+  bestOf: number,
+  turnTimeLimitSeconds: number | null = null,
+): Promise<CreateRoomResult> {
+  return apiRequest('/api/rooms', {
+    method: 'POST',
+    body: { displayName, bestOf, turnTimeLimitSeconds },
+  });
+}
+
+/** Yapay zekâya karşı oda: bot misafir koltuğuna oturur, maç lobiden hemen başlatılabilir. */
+export function createBotRoom(
+  displayName: string,
+  bestOf: number,
+  difficulty: BotDifficulty,
+  turnTimeLimitSeconds: number | null = null,
+): Promise<CreateRoomResult> {
+  return apiRequest('/api/rooms/bot', {
+    method: 'POST',
+    body: { displayName, bestOf, difficulty, turnTimeLimitSeconds },
+  });
+}
+
+/** Dolu odayı salt okunur izlemek için izleyici token'ı alır. */
+export function watchRoom(roomCode: string): Promise<WatchRoomResult> {
+  return apiRequest(`/api/rooms/${encodeURIComponent(roomCode)}/watch`, { method: 'POST' });
 }
 
 export function joinRoom(roomCode: string, displayName: string): Promise<JoinRoomResult> {
@@ -23,6 +51,11 @@ export function getPublicRoomInfo(roomCode: string): Promise<RoomSnapshotDto> {
 
 export function getRoomState(roomCode: string, token: string): Promise<RoomSnapshotDto> {
   return apiRequest(`/api/rooms/${encodeURIComponent(roomCode)}/state`, { token });
+}
+
+/** Güncel (veya yeni biten) maçın sunucu tarafında hesaplanan analitiği; oyuncu veya izleyici token'ı. */
+export function getMatchStats(roomCode: string, token: string): Promise<MatchStatsDto> {
+  return apiRequest(`/api/rooms/${encodeURIComponent(roomCode)}/stats`, { token });
 }
 
 export function leaveRoom(roomCode: string, token: string): Promise<void> {

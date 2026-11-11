@@ -15,6 +15,7 @@ SQL Server 2022, EF Core 10 Code First, tüm tarihler UTC, PK'lar `Guid` (Versio
 | CurrentMatchId | uniqueidentifier null | |
 | CreatedAtUtc / ExpiresAtUtc / CompletedAtUtc | datetime2 | Index: Status, ExpiresAtUtc |
 | RowVersion | rowversion | optimistic concurrency |
+| TurnTimeLimitSeconds | int null | Hamle süresi: NULL (süresiz), 15 veya 30 (check) |
 
 ### Players
 | Alan | Tip | Not |
@@ -27,6 +28,7 @@ SQL Server 2022, EF Core 10 Code First, tüm tarihler UTC, PK'lar `Guid` (Versio
 | SessionTokenHash | nvarchar(88) | SHA-256 base64; ham token DB'de yok |
 | IsConnected | bit | |
 | JoinedAtUtc / LastSeenAtUtc / DisconnectedAtUtc | datetime2 | |
+| BotDifficulty | int null | NULL = insan; 1 = Kolay, 2 = Usta (check) |
 
 ### Matches
 Id, RoomId FK, MatchNumber, BestOf, RequiredWins, Status (NotStarted/StartingRoll/InProgress/Completed),
@@ -35,7 +37,8 @@ Player1Score, Player2Score, CurrentRoundId, WinnerPlayerId, StartedAtUtc, Comple
 
 ### Rounds
 Id, MatchId FK, RoundNumber, Status, StartingPlayerId, CurrentPlayerId, WinnerPlayerId,
-TurnNumber, StartedAtUtc, CompletedAtUtc, StateVersion, RowVersion. Unique (MatchId, RoundNumber).
+TurnNumber, PendingDice, PendingBonusPicks, **TurnDeadlineUtc** (otomatik eylem zamanı; filtreli index),
+StartedAtUtc, CompletedAtUtc, StateVersion, RowVersion. Unique (MatchId, RoundNumber).
 
 ### PlayerRoundStates
 Id, RoundId FK, PlayerId, CollectedCount (check 0–15). **Unique (RoundId, PlayerId)**.

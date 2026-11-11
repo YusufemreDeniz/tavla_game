@@ -2,7 +2,10 @@ using KizTavlasi.Domain;
 
 namespace KizTavlasi.Application.Dtos;
 
-public sealed record CreateRoomRequest(string DisplayName, int BestOf);
+public sealed record CreateRoomRequest(string DisplayName, int BestOf, int? TurnTimeLimitSeconds = null);
+
+/// <param name="Difficulty">"Easy" (Kolay) veya "Master" (Usta).</param>
+public sealed record CreateBotRoomRequest(string DisplayName, int BestOf, string Difficulty, int? TurnTimeLimitSeconds = null);
 
 public sealed record JoinRoomRequest(string DisplayName);
 
@@ -11,7 +14,8 @@ public sealed record PlayerDto(
     string DisplayName,
     int Seat,
     bool IsConnected,
-    bool IsHost);
+    bool IsHost,
+    bool IsBot = false);
 
 public sealed record PointStateDto(int PointNumber, int BackCount, int FrontCount);
 
@@ -32,7 +36,8 @@ public sealed record RoundDto(
     int TurnNumber,
     IReadOnlyList<int> PendingDice,
     int PendingBonusPicks,
-    IReadOnlyList<PlayerBoardDto> Boards);
+    IReadOnlyList<PlayerBoardDto> Boards,
+    DateTime? TurnDeadlineUtc = null);
 
 public sealed record MatchDto(
     Guid Id,
@@ -54,13 +59,20 @@ public sealed record RoomSnapshotDto(
     MatchDto? Match,
     Guid? RematchRequestedByPlayerId,
     long StateVersion,
-    DateTime ServerTimeUtc);
+    DateTime ServerTimeUtc,
+    int? TurnTimeLimitSeconds = null);
 
 public sealed record CreateRoomResult(
     string RoomCode,
     string SharePath,
     string PlayerToken,
     PlayerDto Player,
+    RoomSnapshotDto RoomState);
+
+/// <summary>İzleyici girişi: salt okunur token ve anlık durum.</summary>
+public sealed record WatchRoomResult(
+    string RoomCode,
+    string SpectatorToken,
     RoomSnapshotDto RoomState);
 
 public sealed record JoinRoomResult(
@@ -122,11 +134,41 @@ public sealed record MatchEndedDto(
     int Player2Score,
     bool IsMars);
 
+/// <param name="AverageRoll">Atış başına ortalama zar toplamı (iki zarın toplamı).</param>
+/// <param name="WastedDice">Atışta veya hamle sonrasında oynanamadığı için boşa giden zar sayısı.</param>
+/// <param name="LastBringDownTurn">Son oynanan elde indirmeyi tamamladığı kendi zar atışı (tamamlamadıysa null).</param>
+/// <param name="AverageBringDownTurn">İndirmeyi tamamladığı ellerdeki ortalama atış sayısı.</param>
+public sealed record PlayerMatchStatsDto(
+    Guid PlayerId,
+    int Rolls,
+    double AverageRoll,
+    int Doubles,
+    int LongestDoubleStreak,
+    int WastedDice,
+    int? LastBringDownTurn,
+    double? AverageBringDownTurn,
+    int MarsWins,
+    int Points);
+
+/// <param name="Kind">Mars, PhaseShift, DoubleStreak, BigDouble veya FastBringDown.</param>
+public sealed record MatchHighlightDto(string Kind, Guid? PlayerId, int RoundNumber, string Text);
+
+public sealed record MatchStatsDto(
+    Guid MatchId,
+    int RoundsPlayed,
+    int TotalRolls,
+    IReadOnlyList<PlayerMatchStatsDto> Players,
+    MatchHighlightDto? Highlight);
+
 public sealed record StartMatchResult(StartingRollDto StartingRoll, RoomSnapshotDto Snapshot);
 
 public sealed record RollDiceResult(DiceRollResultDto Roll, RoomSnapshotDto Snapshot, bool WasAlreadyProcessed);
 
-public sealed record PublicConfigDto(string ProductName, IReadOnlyList<int> SupportedBestOf, IReadOnlyList<string> AllowedReactions);
+public sealed record PublicConfigDto(
+    string ProductName,
+    IReadOnlyList<int> SupportedBestOf,
+    IReadOnlyList<string> AllowedReactions,
+    IReadOnlyList<int> SupportedTurnTimeLimits);
 
 public static class DtoExtensions
 {

@@ -10,7 +10,7 @@ public static class SnapshotMapper
     {
         var players = room.Players
             .OrderBy(p => p.Seat)
-            .Select(p => new PlayerDto(p.Id, p.DisplayName, p.Seat, p.IsConnected, p.Id == room.HostPlayerId))
+            .Select(p => new PlayerDto(p.Id, p.DisplayName, p.Seat, p.IsConnected, p.Id == room.HostPlayerId, p.IsBot))
             .ToList();
 
         MatchDto? matchDto = null;
@@ -48,7 +48,9 @@ public static class SnapshotMapper
                     round.TurnNumber,
                     pendingDice,
                     round.PendingBonusPicks,
-                    boards);
+                    boards,
+                    // DB'den okunan DateTime Kind=Unspecified gelir; istemci "Z" olmadan yerel saat sanmasın.
+                    round.TurnDeadlineUtc is DateTime deadline ? DateTime.SpecifyKind(deadline, DateTimeKind.Utc) : null);
             }
 
             matchDto = new MatchDto(
@@ -72,6 +74,7 @@ public static class SnapshotMapper
             matchDto,
             room.RematchRequestedByPlayerId,
             room.StateVersion,
-            serverTimeUtc);
+            serverTimeUtc,
+            room.TurnTimeLimitSeconds);
     }
 }

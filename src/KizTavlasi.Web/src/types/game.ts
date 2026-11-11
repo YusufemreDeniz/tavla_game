@@ -4,6 +4,8 @@ export interface PlayerDto {
   seat: number;
   isConnected: boolean;
   isHost: boolean;
+  /** Sunucu tarafında oynayan yapay zekâ rakibi. */
+  isBot?: boolean;
 }
 
 export interface PointStateDto {
@@ -31,6 +33,8 @@ export interface RoundDto {
   pendingDice: number[];
   pendingBonusPicks: number;
   boards: PlayerBoardDto[];
+  /** Sunucunun sıradaki oyuncu adına hareket edeceği an (bot / hamle süresi). */
+  turnDeadlineUtc?: string | null;
 }
 
 export interface MatchDto {
@@ -57,6 +61,8 @@ export interface RoomSnapshotDto {
   rematchRequestedByPlayerId: string | null;
   stateVersion: number;
   serverTimeUtc: string;
+  /** Opsiyonel hamle süresi (saniye); null = süresiz. */
+  turnTimeLimitSeconds?: number | null;
 }
 
 export interface CreateRoomResult {
@@ -66,6 +72,14 @@ export interface CreateRoomResult {
   player: PlayerDto;
   roomState: RoomSnapshotDto;
 }
+
+export interface WatchRoomResult {
+  roomCode: string;
+  spectatorToken: string;
+  roomState: RoomSnapshotDto;
+}
+
+export type BotDifficulty = 'Easy' | 'Master';
 
 export interface JoinRoomResult {
   roomCode: string;
@@ -143,10 +157,41 @@ export interface MatchEndedDto {
   isMars: boolean;
 }
 
+export interface PlayerMatchStatsDto {
+  playerId: string;
+  rolls: number;
+  /** Atış başına ortalama zar toplamı. */
+  averageRoll: number;
+  doubles: number;
+  longestDoubleStreak: number;
+  wastedDice: number;
+  /** Son elde indirmeyi tamamladığı kendi zar atışı. */
+  lastBringDownTurn: number | null;
+  averageBringDownTurn: number | null;
+  marsWins: number;
+  points: number;
+}
+
+export interface MatchHighlightDto {
+  kind: 'Mars' | 'PhaseShift' | 'DoubleStreak' | 'BigDouble' | 'FastBringDown';
+  playerId: string | null;
+  roundNumber: number;
+  text: string;
+}
+
+export interface MatchStatsDto {
+  matchId: string;
+  roundsPlayed: number;
+  totalRolls: number;
+  players: PlayerMatchStatsDto[];
+  highlight: MatchHighlightDto | null;
+}
+
 export interface PublicConfigDto {
   productName: string;
   supportedBestOf: number[];
   allowedReactions: string[];
+  supportedTurnTimeLimits?: number[];
 }
 
 export type ConnectionStatus =
@@ -171,4 +216,5 @@ export type GameErrorCode =
   | 'INVALID_COMMAND'
   | 'REMATCH_NOT_AVAILABLE'
   | 'ROUND_ALREADY_COMPLETED'
-  | 'NOT_HOST';
+  | 'NOT_HOST'
+  | 'SPECTATOR_READ_ONLY';

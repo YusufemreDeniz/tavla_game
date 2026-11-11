@@ -1,7 +1,8 @@
-import { motion } from 'framer-motion';
-import { Crown, User, Hourglass } from 'lucide-react';
-import type { RoomSnapshotDto } from '../types/game';
-import ConnectionDot from '../components/ConnectionDot';
+import { useId } from 'react';
+import { Bot, Eye, Timer, Trophy } from 'lucide-react';
+import type { BotDifficulty, ConnectionStatus, RoomSnapshotDto } from '../types/game';
+import { EmptySeatRow, PlayerRow } from '../components/lobby/PlayerRow';
+import { Badge, Button, Notice, Panel } from '../components/ui';
 import { useGameStore } from '../store/gameStore';
 
 const FORMAT_LABELS: Record<number, string> = {
@@ -10,82 +11,112 @@ const FORMAT_LABELS: Record<number, string> = {
   5: '5 el üzerinden — 3 puan kazanan maçı alır',
 };
 
+/** Başlatma eylemi bağlantı 'connected' değilken kapalıdır; kısa neden metni (connected için gösterilmez). */
+const START_BLOCKED_REASON: Record<ConnectionStatus, string> = {
+  idle: 'Sunucuya bağlanılıyor. Bağlantı kurulunca maçı başlatabilirsin.',
+  connecting: 'Sunucuya bağlanılıyor. Bağlantı kurulunca maçı başlatabilirsin.',
+  connected: '',
+  reconnecting: 'Yeniden bağlanılıyor. Bağlantı gelince maçı başlatabilirsin.',
+  disconnected: 'Bağlantı kesildi. Yeniden bağlanınca maçı başlatabilirsin.',
+};
+
 interface LobbyViewProps {
   snapshot: RoomSnapshotDto;
   onStartMatch: () => void;
+  /** Rakip beklerken aynı ayarlarla yapay zekâya karşı yeni masa açar. */
+  onPlayBot?: (difficulty: BotDifficulty) => void;
+  spectator?: boolean;
 }
 
-export default function LobbyView({ snapshot, onStartMatch }: LobbyViewProps) {
+export default function LobbyView({ snapshot, onStartMatch, onPlayBot, spectator = false }: LobbyViewProps) {
   const myPlayerId = useGameStore((s) => s.myPlayerId);
+  // Bağlantı durumunun TEK kaynağı store'dur (RoomPage komut katmanı da aynı değeri okur).
+  const connectionStatus = useGameStore((s) => s.connectionStatus);
+  const startReasonId = useId();
+  const canStart = connectionStatus === 'connected';
   const me = snapshot.players.find((p) => p.id === myPlayerId);
-  const isHost = me?.isHost ?? false;
+  const isHost = !spectator && (me?.isHost ?? false);
   const bothPlayersPresent = snapshot.players.length === 2;
+  const hasBot = snapshot.players.some((p) => p.isBot);
 
   return (
-    <div className="space-y-4">
-      <section
-        aria-label="Lobi"
-        className="rounded-2xl border border-gold-500/20 bg-gradient-to-b from-night-800 to-night-900 p-5 shadow-xl"
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="font-display text-lg text-gold-400">Lobi</h1>
-          <span className="rounded-full border border-gold-500/30 bg-night-900 px-2.5 py-0.5 text-xs text-cream-200">
-            {snapshot.players.length} / 2 Oyuncu
-          </span>
+    <div className="space-y-4 font-ui">
+      <Panel as="section" aria-label="Lobi" className="shadow-plate">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h1 className="font-brand text-heading-md text-fg-primary">Lobi</h1>
+          <Badge tone="accent">{snapshot.players.length} / 2 Oyuncu</Badge>
         </div>
 
         <ul className="space-y-2.5">
           {snapshot.players.map((player) => (
-            <motion.li
+            <PlayerRow
               key={player.id}
-              initial={{ opacity: 0, x: -12 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center justify-between rounded-xl border border-night-600 bg-night-950/70 px-4 py-3"
-            >
-              <span className="flex items-center gap-2.5 text-sm font-medium text-cream-100">
-                {player.isHost ? (
-                  <Crown size={16} className="text-gold-400" aria-label="Oda sahibi" />
-                ) : (
-                  <User size={16} className="text-cream-400" aria-hidden="true" />
-                )}
-                <span>{player.displayName}</span>
-                {player.id === myPlayerId && <span className="text-xs text-cream-400">(sen)</span>}
-              </span>
-              <ConnectionDot isConnected={player.isConnected} />
-            </motion.li>
+              displayName={player.displayName}
+              isHost={player.isHost}
+              isBot={player.isBot}
+              isSelf={player.id === myPlayerId}
+              isConnected={player.isConnected}
+            />
           ))}
 
-          {!bothPlayersPresent && (
-            <li className="flex items-center gap-2.5 rounded-xl border border-dashed border-gold-500/30 bg-night-900/40 px-4 py-3.5 text-sm text-cream-300">
-              <Hourglass size={16} className="animate-pulse text-gold-400" aria-hidden="true" />
-              Rakip bekleniyor… Aşağıdaki davet bağlantısını paylaş.
-            </li>
-          )}
+          {!bothPlayersPresent && <EmptySeatRow>Rakip bekleniyor… Aşağıdaki davet bağlantısını paylaş.</EmptySeatRow>}
         </ul>
 
-        <p className="mt-4 rounded-lg border border-night-700 bg-night-950/60 px-3 py-2 text-xs text-cream-300">
-          {FORMAT_LABELS[snapshot.bestOf] ?? `${snapshot.bestOf} el üzerinden`}
-        </p>
-      </section>
+        <div className="mt-4 space-y-2 rounded-control border border-line-subtle bg-surface-page px-4 py-3 text-ui-sm text-fg-secondary">
+          <p className="flex items-start gap-2">
+            <Trophy size={14} className="mt-0.5 shrink-0 text-fg-accent" aria-hidden="true" />
+            <span>{FORMAT_LABELS[snapshot.bestOf] ?? `${snapshot.bestOf} el üzerinden`}</span>
+          </p>
+          <p className="flex items-start gap-2">
+            <Timer size={14} className="mt-0.5 shrink-0 text-fg-accent" aria-hidden="true" />
+            <span>
+              {snapshot.turnTimeLimitSeconds
+                ? `Hamle süresi: ${snapshot.turnTimeLimitSeconds} sn — süre dolunca sunucu otomatik oynar`
+                : 'Hamle süresi: süresiz'}
+            </span>
+          </p>
+        </div>
+      </Panel>
+
+      {!bothPlayersPresent && isHost && onPlayBot && (
+        <Panel as="section" aria-label="Beklerken yapay zekâya karşı oyna" padding="sm" className="p-4">
+          <h2 className="mb-3 flex items-start gap-2 text-ui font-semibold text-fg-primary">
+            <Bot size={16} className="mt-0.5 shrink-0 text-fg-accent" aria-hidden="true" />
+            Beklemek istemiyor musun? Yapay zekâya karşı oyna
+          </h2>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="ghost" size="sm" onClick={() => onPlayBot('Easy')}>
+              Kolay
+            </Button>
+            <Button variant="tertiary" size="sm" onClick={() => onPlayBot('Master')}>
+              Usta
+            </Button>
+          </div>
+        </Panel>
+      )}
 
       {bothPlayersPresent &&
         (isHost ? (
-          <motion.button
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            type="button"
-            onClick={onStartMatch}
-            className="min-h-12 w-full rounded-xl bg-gradient-to-r from-bordo-600 to-bordo-700 px-4 py-3.5 text-lg font-bold text-cream-50 shadow-lg ring-1 ring-gold-500/30 transition-transform hover:scale-[1.01]"
-          >
-            Oyunu Başlat
-          </motion.button>
+          <div className="space-y-2">
+            <Button
+              fullWidth
+              onClick={onStartMatch}
+              disabled={!canStart}
+              aria-describedby={canStart ? undefined : startReasonId}
+            >
+              {hasBot ? 'Bota Karşı Başlat' : 'Oyunu Başlat'}
+            </Button>
+            {/* Canlı bölge değil: bağlantı rozeti ve yeniden bağlanma uyarısı zaten duyuruyor. */}
+            {!canStart && (
+              <p id={startReasonId} className="text-center text-ui-sm text-fg-secondary">
+                {START_BLOCKED_REASON[connectionStatus]}
+              </p>
+            )}
+          </div>
         ) : (
-          <p
-            className="rounded-xl border border-night-600 bg-night-800 px-4 py-3.5 text-center text-sm text-cream-300"
-            role="status"
-          >
+          <Notice role="status" icon={spectator ? <Eye size={15} /> : undefined}>
             Oda sahibinin oyunu başlatması bekleniyor…
-          </p>
+          </Notice>
         ))}
     </div>
   );

@@ -5,6 +5,7 @@ using KizTavlasi.Domain;
 using KizTavlasi.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace KizTavlasi.Application;
 
@@ -24,6 +25,8 @@ public sealed class GameService
     private readonly GameEngine _engine;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<GameService> _logger;
+    private readonly ITurnAutomationScheduler _automation;
+    private readonly GameOptions _options;
 
     public GameService(
         IGameDbContext db,
@@ -32,7 +35,9 @@ public sealed class GameService
         IGameNotifier notifier,
         GameEngine engine,
         TimeProvider timeProvider,
-        ILogger<GameService> logger)
+        ILogger<GameService> logger,
+        ITurnAutomationScheduler? automation = null,
+        IOptions<GameOptions>? options = null)
     {
         _db = db;
         _roomService = roomService;
@@ -41,6 +46,14 @@ public sealed class GameService
         _engine = engine;
         _timeProvider = timeProvider;
         _logger = logger;
+        _automation = automation ?? NullTurnAutomationScheduler.Instance;
+        _options = options?.Value ?? new GameOptions();
+    }
+
+    /// <summary>Commit sonrası: aktif elin otomatik eylem zamanını (bot / süre) zamanlayıcıya bildirir.</summary>
+    private void ScheduleAutomation(Guid roomId, RoomSnapshotDto snapshot)
+    {
+        _automation.Schedule(roomId, snapshot.Match?.CurrentRound?.TurnDeadlineUtc);
     }
 
     private sealed record MatchStartedEventPayload(
@@ -49,14 +62,6 @@ public sealed class GameService
         Guid StartingPlayerId,
         int StartingSeat,
         List<StartingRollAttemptDto> Attempts);
-
-    private sealed record MovePlayedEventPayload(
-        Guid PlayerId,
-        Guid? CommandId,
-        int PointNumber,
-        string Action,
-        string Remaining,
-        int PendingBonusPicks);
 
     public async Task<StartMatchResult> StartMatchAsync(PlayerSession session, Guid commandId, CancellationToken ct = default)
     {
@@ -129,6 +134,7 @@ public sealed class GameService
                 txResult.RoomCode,
                 "MatchStarted",
                 ct);
+            ScheduleAutomation(session.RoomId, txResult.Result.Snapshot);
         }
 
         return txResult.Result;
@@ -163,6 +169,7 @@ public sealed class GameService
         room.StateVersion++;
         match.StateVersion = room.StateVersion;
         round.StateVersion = room.StateVersion;
+        round.TurnDeadlineUtc = TurnDeadlines.Compute(room, round, now, _options);
 
         _db.Matches.Add(match);
         _db.Rounds.Add(round);
@@ -290,6 +297,7 @@ public sealed class GameService
                 round.PendingDice = string.Join(',', outcome.PlayableDice);
                 round.PendingBonusPicks = outcome.FreePicksGranted;
             }
+            round.TurnDeadlineUtc = TurnDeadlines.Compute(room, round, now, _options);
 
             var rollResult = new DiceRollResultDto(
                 player.Id,
@@ -351,6 +359,7 @@ public sealed class GameService
                 txResult.RoomCode,
                 "DiceRollResolved",
                 ct);
+            ScheduleAutomation(session.RoomId, txResult.Result.Snapshot);
         }
 
         return txResult.Result;
@@ -438,6 +447,7 @@ public sealed class GameService
             player.LastSeenAtUtc = now;
             var playerState = round.PlayerStates.First(s => s.PlayerId == player.Id);
             var board = playerState.ToBoard();
+            var wasCollecting = board.IsCollecting;
 
             var step = _engine.PlayMove(board, pointNumber);
             playerState.ApplyBoard(board);
@@ -481,6 +491,7 @@ public sealed class GameService
             {
                 round.CurrentPlayerId = opponent.Id;
             }
+            round.TurnDeadlineUtc = TurnDeadlines.Compute(room, round, now, _options);
 
             var movePlayed = new MovePlayedDto(
                 player.Id,
@@ -498,7 +509,17 @@ public sealed class GameService
                 round.Id,
                 room.StateVersion,
                 "MovePlayed",
-                new MovePlayedEventPayload(player.Id, commandId, pointNumber, step.Action.ToString(), round.PendingDice, round.PendingBonusPicks),
+                new MovePlayedEventPayload(
+                    player.Id,
+                    commandId,
+                    pointNumber,
+                    step.Action.ToString(),
+                    round.PendingDice,
+                    round.PendingBonusPicks,
+                    WastedDiceCount: wastedDice.Count,
+                    BringDownCompleted: !wasCollecting && board.IsCollecting,
+                    // Zar atışı TurnNumber'ı artırır; hamle, bir önceki tur numarasındaki atışa aittir.
+                    RollTurnNumber: Math.Max(0, round.TurnNumber - 1)),
                 now);
 
             await _db.SaveChangesAsync(innerCt);
@@ -551,6 +572,7 @@ public sealed class GameService
                 txResult.RoomCode,
                 "MovePlayed",
                 ct);
+            ScheduleAutomation(session.RoomId, txResult.Snapshot);
         }
 
         return txResult.Snapshot;
@@ -595,6 +617,10 @@ public sealed class GameService
         match.Player1Score = progress.Player1Score;
         match.Player2Score = progress.Player2Score;
 
+        // Maç analitiği için el sonucu (mars bilgisi round tablosunda tutulmaz).
+        _roomService.AddEvent(room.Id, match.Id, round.Id, room.StateVersion, GameEventTypes.RoundCompleted,
+            new RoundCompletedEventPayload(winner.Id, round.RoundNumber, isMars, progress.PointsAwarded), now);
+
         MatchEndedDto? matchEnded = null;
 
         if (progress.MatchWinnerSeat is not null)
@@ -613,6 +639,7 @@ public sealed class GameService
             var starter = room.Players.First(p => p.Seat == starterSeat);
             var nextRound = CreateRound(match.Id, round.RoundNumber + 1, starter.Id, room.Players.OrderBy(p => p.Seat).ToList(), now);
             nextRound.StateVersion = room.StateVersion;
+            nextRound.TurnDeadlineUtc = TurnDeadlines.Compute(room, nextRound, now, _options);
             match.CurrentRoundId = nextRound.Id;
             _db.Rounds.Add(nextRound);
         }
@@ -658,7 +685,8 @@ public sealed class GameService
             await _db.SaveChangesAsync(innerCt);
 
             var snapshot = SnapshotMapper.ToSnapshot(room, match, round, now);
-            return (Snapshot: snapshot, RoomCode: room.Code);
+            var opponentIsBot = room.Players.Any(p => p.Id != session.PlayerId && p.IsBot);
+            return (Snapshot: snapshot, RoomCode: room.Code, OpponentIsBot: opponentIsBot);
         }, ct);
 
         await _roomService.SafeNotifyAsync(
@@ -666,6 +694,12 @@ public sealed class GameService
             txResult.RoomCode,
             "RematchRequested",
             ct);
+
+        if (txResult.OpponentIsBot)
+        {
+            // Bot rövanşı kısa bir "düşünme" sonrası kabul eder (TurnAutomationRunner).
+            _automation.Schedule(session.RoomId, now.AddMilliseconds(TurnDeadlines.BotThinkMs(txResult.Snapshot.StateVersion, _options)));
+        }
 
         return txResult.Snapshot;
     }
@@ -706,6 +740,7 @@ public sealed class GameService
             txResult.RoomCode,
             "RematchAccepted",
             ct);
+        ScheduleAutomation(session.RoomId, txResult.Result.Snapshot);
 
         return txResult.Result;
     }

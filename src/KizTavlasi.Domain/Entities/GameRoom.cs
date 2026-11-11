@@ -10,6 +10,9 @@ public class GameRoom
     public Guid? CurrentMatchId { get; set; }
     public Guid? RematchRequestedByPlayerId { get; set; }
     public long StateVersion { get; set; }
+
+    /// <summary>Opsiyonel hamle süresi (saniye); <c>null</c> = süresiz.</summary>
+    public int? TurnTimeLimitSeconds { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime ExpiresAtUtc { get; set; }
     public DateTime? CompletedAtUtc { get; set; }

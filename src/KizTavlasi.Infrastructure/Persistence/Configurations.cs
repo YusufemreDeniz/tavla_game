@@ -11,6 +11,7 @@ public sealed class GameRoomConfiguration : IEntityTypeConfiguration<GameRoom>
         builder.ToTable("GameRooms", t =>
         {
             t.HasCheckConstraint("CK_GameRooms_BestOf", "[BestOf] IN (1, 3, 5)");
+            t.HasCheckConstraint("CK_GameRooms_TurnTimeLimitSeconds", "[TurnTimeLimitSeconds] IS NULL OR [TurnTimeLimitSeconds] IN (15, 30)");
         });
 
         builder.HasKey(r => r.Id);
@@ -41,6 +42,7 @@ public sealed class PlayerConfiguration : IEntityTypeConfiguration<Player>
         {
             t.HasCheckConstraint("CK_Players_Seat", "[Seat] IN (1, 2)");
             t.HasCheckConstraint("CK_Players_DisplayName", "LEN([DisplayName]) >= 2");
+            t.HasCheckConstraint("CK_Players_BotDifficulty", "[BotDifficulty] IS NULL OR [BotDifficulty] IN (1, 2)");
         });
 
         builder.HasKey(p => p.Id);
@@ -81,6 +83,8 @@ public sealed class RoundConfiguration : IEntityTypeConfiguration<Round>
         builder.Property(r => r.Id).ValueGeneratedNever();
         builder.Property(r => r.PendingDice).HasMaxLength(32).HasDefaultValue(string.Empty);
         builder.HasIndex(r => new { r.MatchId, r.RoundNumber }).IsUnique();
+        // Otomasyon taraması: süresi gelmiş aktif eller.
+        builder.HasIndex(r => r.TurnDeadlineUtc).HasFilter("[TurnDeadlineUtc] IS NOT NULL");
         builder.Property(r => r.RowVersion).IsRowVersion();
 
         builder.HasMany(r => r.PlayerStates)

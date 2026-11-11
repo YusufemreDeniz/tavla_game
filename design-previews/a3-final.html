@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kız Tavlası Online — A3 Modern Tavla Kulübü, Premium Edition (prototip)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* Yazı tipleri: Fraunces, Inter, IBM Plex Mono — hepsi SIL OFL 1.1, latin-ext (Türkçe: ğ ı İ ş ç ö ü) destekli. */
+:root{
+  --night:#141826; --night-in:#0f1320; --raised:#1a2033; --hover:#1f2538;
+  --wood:#533b28; --wood-lt:#664a33; --wood-dk:#3b291b;
+  --cream:#f0e6d2; --cream-2:#cfc3ab; --cream-3:#a99f8b;
+  --gold:#d4af37; --gold-lt:#e6c768; --gold-dk:#a8892a;
+  --bordo:#8e2f3c; --bordo-top:#9a3544; --bordo-hv:#a03545; --bordo-bd:#b45466;
+  --line:#7d86a0; --line-soft:rgba(240,230,210,.18); --err:#e58a9a;
+  --grain:repeating-linear-gradient(92deg,rgba(255,255,255,.025) 0 2px,transparent 2px 9px,rgba(0,0,0,.08) 9px 11px,transparent 11px 23px);
+}
+*{box-sizing:border-box}
+html{background:var(--night)}
+body{margin:0;min-height:100vh;background:var(--night);color:var(--cream);font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+.disp{font-family:'Fraunces',Georgia,'Times New Roman',serif}
+.page{max-width:1280px;min-height:100vh;margin:0 auto;padding:0 96px;display:flex;flex-direction:column}
+
+/* Üst çubuk */
+.topbar{height:88px;display:flex;align-items:center;justify-content:space-between}
+.actions{display:flex;gap:8px}
+.ibtn{min-height:44px;min-width:44px;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid #656e8a;border-radius:10px;color:#e0d5bd;font:500 14px 'Inter',system-ui,sans-serif;cursor:pointer;transition:background .15s,border-color .15s}
+.ibtn:hover{background:var(--hover);border-color:#8a93ad}
+.ibtn:focus-visible,.opt:focus-visible,.btn:focus-visible,.rbody:focus-visible{outline:3px solid var(--gold-lt);outline-offset:3px}
+
+/* Hero */
+.hero{display:flex;align-items:center;justify-content:space-between;gap:40px;padding:28px 0 52px}
+.hero .rule{width:48px;height:2px;background:var(--gold);margin-bottom:26px}
+h1{margin:0;font-size:68px;line-height:1.04;font-weight:500;letter-spacing:-.02em;color:var(--cream)}
+.tagline{margin:22px 0 0;max-width:460px;font-size:18px;line-height:1.55;color:var(--cream-2)}
+/* Ahşap yalnızca seçili alanlarda: hane çerçevesi, ayırıcı çubuk, adım pulları, kurallar penceresi */
+.plate{flex-shrink:0;width:440px;padding:10px;border-radius:16px;background:var(--grain),linear-gradient(180deg,var(--wood-lt),var(--wood) 45%,var(--wood-dk));box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 0 0 1px rgba(0,0,0,.3),0 18px 40px rgba(0,0,0,.4)}
+.plate svg{display:block;width:100%;height:auto;border-radius:8px;box-shadow:inset 0 0 0 1px rgba(230,199,104,.4)}
+.rail{position:relative;height:10px;border-radius:5px;background:var(--grain),linear-gradient(180deg,var(--wood-lt),var(--wood-dk));box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 0 0 1px rgba(0,0,0,.35)}
+.rail i{position:absolute;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 1.5px rgba(0,0,0,.35)}
+.rail i:nth-child(1){left:20px}.rail i:nth-child(2){left:50%;margin-left:-3px}.rail i:nth-child(3){right:20px}
+
+/* Ana ızgara */
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:80px;padding:48px 0 56px}
+.col-right{display:flex;flex-direction:column;gap:52px}
+.hl{border-top:1px solid var(--line-soft);padding-top:26px}
+h2{margin:0 0 22px;font-size:30px;font-weight:500;letter-spacing:-.01em;color:var(--cream)}
+form.stack{display:flex;flex-direction:column;gap:24px}
+form.stack.tight{gap:18px}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+.lbl{display:block;font-size:14px;font-weight:500;color:var(--cream-2);margin:0 0 8px;padding:0}
+
+.inp{width:100%;height:50px;padding:0 16px;background:var(--night-in);border:1px solid var(--line);border-radius:12px;color:var(--cream);font:400 16px 'Inter',system-ui,sans-serif;outline:none;transition:border-color .15s,box-shadow .15s}
+.inp::placeholder{color:#9a917f;letter-spacing:0;text-transform:none}
+.inp:hover:not(:disabled){border-color:#a1a9c0}
+.inp:focus-visible{border-color:var(--gold-lt);box-shadow:0 0 0 3px rgba(230,199,104,.4)}
+.inp[aria-invalid="true"]{border-color:var(--err)}
+.inp[aria-invalid="true"]:focus-visible{box-shadow:0 0 0 3px rgba(229,138,154,.4)}
+.inp:disabled{opacity:.5;cursor:not-allowed}
+.mono{height:54px;font-family:'IBM Plex Mono',ui-monospace,monospace;font-weight:500;font-size:20px;letter-spacing:.3em;text-transform:uppercase}
+.err{margin:8px 0 0;font-size:13.5px;line-height:1.4;color:var(--err);display:flex;gap:6px;align-items:flex-start}
+.err[hidden]{display:none}
+.err svg{flex-shrink:0;margin-top:1px}
+
+/* Seçenekler: pul göstergeli, üçlü yatay */
+.group{display:grid;gap:10px}
+.group.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.group.c2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.opt{min-height:78px;padding:10px 6px;border:1px solid var(--line);border-radius:12px;background:var(--raised);color:var(--cream);font-family:'Inter',system-ui,sans-serif;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;text-align:center;transition:background .15s,border-color .15s}
+.opt .chk{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid #9a8f7c;transition:background .15s,border-color .15s,box-shadow .15s}
+.opt .tx{display:flex;flex-direction:column;gap:1px;min-width:0}
+.opt b{font-weight:600;font-size:15px;line-height:1.25}
+.opt span.s{font-size:12.5px;line-height:1.3;color:var(--cream-3)}
+.opt:hover:not(:disabled){background:var(--hover);border-color:#a1a9c0}
+.opt[aria-checked="true"]{background:linear-gradient(180deg,var(--bordo-top),var(--bordo));border-color:var(--gold);box-shadow:inset 0 0 0 1px rgba(230,199,104,.5)}
+.opt[aria-checked="true"] .chk{border-color:var(--gold-lt);background:var(--gold);box-shadow:inset 0 0 0 3px var(--bordo)}
+.opt[aria-checked="true"] span.s{color:var(--cream)}
+.opt:disabled{opacity:.5;cursor:not-allowed}
+
+/* Düğmeler: altın > bordo > çerçeveli */
+.btn{width:100%;min-height:54px;padding:0 20px;border-radius:12px;font:700 16px 'Inter',system-ui,sans-serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:10px;transition:background .15s,filter .15s,border-color .15s}
+.btn-gold{background:linear-gradient(180deg,var(--gold-lt),var(--gold) 55%,var(--gold-dk));color:#1a110b;border:1px solid #f3dc8e;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 6px 16px rgba(0,0,0,.35)}
+.btn-gold:hover:not(:disabled){filter:brightness(1.07)}
+.btn-red{background:linear-gradient(180deg,var(--bordo-top),var(--bordo));color:var(--cream);border:1px solid var(--bordo-bd)}
+.btn-red:hover:not(:disabled){background:var(--bordo-hv)}
+.btn-line{background:transparent;color:var(--gold-lt);border:1px solid var(--gold-dk)}
+.btn-line:hover:not(:disabled){background:rgba(212,175,55,.12);border-color:var(--gold)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn[aria-busy="true"]:disabled{opacity:1;cursor:progress}
+.spin{width:17px;height:17px;border:2.5px solid rgba(26,17,11,.25);border-top-color:#1a110b;border-radius:50%;animation:sp .8s linear infinite}
+.btn-line .spin{border-color:rgba(230,199,104,.3);border-top-color:var(--gold-lt)}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2.4s}*{transition:none!important}}
+.hidden{display:none!important}
+
+.bot{border-top:1px solid var(--line-soft);padding-top:24px;display:flex;flex-direction:column;gap:16px}
+.bot-title{margin:0;display:flex;align-items:center;gap:10px;font-size:16px;font-weight:600;color:var(--cream)}
+.help{margin:0;font-size:14px;line-height:1.6;color:var(--cream-3)}
+.ok{color:var(--gold-lt)}
+
+/* Rehber: pul numaraları */
+ol.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:20px}
+ol.steps li{display:grid;grid-template-columns:44px minmax(0,1fr);column-gap:14px;align-items:start}
+.disc{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:radial-gradient(circle at 35% 30%,var(--gold-lt),var(--gold) 60%,var(--gold-dk));color:#1a110b;font:600 19px 'Fraunces',Georgia,serif;box-shadow:0 0 0 3px var(--bordo)}
+ol.steps strong{display:block;font-size:15px;font-weight:600;color:var(--cream);margin-bottom:4px}
+ol.steps .d{font-size:14px;line-height:1.55;color:var(--cream-2)}
+
+footer{margin-top:auto;border-top:1px solid rgba(240,230,210,.14);padding:22px 0 30px;font-size:13.5px;color:var(--cream-3);text-align:center}
+
+/* Kurallar penceresi */
+dialog.rules{max-width:540px;width:calc(100% - 32px);max-height:86vh;overflow:hidden;background:#1a1f31;color:var(--cream);border:7px solid var(--wood);border-radius:18px;padding:0;box-shadow:0 0 0 1px rgba(230,199,104,.5),0 30px 70px rgba(0,0,0,.6)}
+dialog.rules[open]{display:flex;flex-direction:column}
+dialog.rules::backdrop{background:rgba(10,12,20,.8)}
+dialog.rules .hd{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 8px 24px}
+dialog.rules h3{margin:0;font-size:25px;font-weight:500;color:var(--gold-lt)}
+.rbody{overflow:auto;padding:8px 24px 22px;max-height:calc(86vh - 110px);border-radius:8px}
+dialog.rules p{margin:0 0 12px;font-size:14.5px;line-height:1.65;color:#e2d3b4}
+dialog.rules strong{color:var(--cream)}
+dialog.rules .g{color:var(--gold-lt)}
+
+/* Tablet 768–1100: iki sütun korunur, seçenekler dikey pul düzeninde */
+@media (max-width:1100px){
+  .page{padding:0 40px}
+  .grid{column-gap:44px}
+  .plate{width:300px;padding:8px}
+  h1{font-size:54px}
+}
+/* Geniş masaüstü: seçenekler satır içi (pul solda) */
+@media (min-width:1101px){
+  .opt{flex-direction:row;justify-content:flex-start;gap:12px;padding:10px 14px;text-align:left;min-height:62px}
+  .opt .chk{width:20px;height:20px}
+}
+/* Mobil 375 */
+@media (max-width:767px){
+  .page{padding:0 20px}
+  .topbar{height:64px}
+  .hero{padding:12px 0 26px}
+  .hero .rule{margin-bottom:18px}
+  h1{font-size:40px}
+  .tagline{font-size:16px;margin-top:14px}
+  .plate{display:none}
+  .grid{display:flex;flex-direction:column;gap:40px;padding:32px 0 40px}
+  .col-right{gap:40px}
+  h2{font-size:26px;margin-bottom:18px}
+  form.stack{gap:22px}
+  .group{gap:8px}
+  .mono{font-size:19px}
+  footer{padding:20px 0 28px}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="topbar">
+<svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="16" fill="#8e2f3c" stroke="#d4af37" stroke-width="2"/><path d="M10 25 14 11 18 25Z M18 25 22 11 26 25Z" fill="#d4af37"/></svg>
+<div class="actions">
+<button type="button" class="ibtn" id="sound-btn" aria-label="Sesi kapat">
+<svg id="ico-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+<svg id="ico-off" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/></svg>
+</button>
+<button type="button" class="ibtn" id="rules-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>Kurallar</button>
+</div>
+</div>
+
+<header class="hero">
+<div>
+<div class="rule"></div>
+<h1 class="disp">Kız Tavlası Online</h1>
+<p class="tagline">Arkadaşınla linki paylaş, gerçek zamanlı kız tavlası oyna.</p>
+</div>
+<div class="plate" aria-hidden="true">
+<svg viewBox="0 0 420 150">
+<rect width="420" height="150" fill="#0f1320"/>
+<g stroke="#f0e6d2" stroke-opacity="0.22" stroke-width="1.1">
+<polygon points="0,150 35,14 70,150" fill="#8e2f3c" fill-opacity="0.6"/>
+<polygon points="70,150 105,14 140,150" fill="#f0e6d2" fill-opacity="0.07"/>
+<polygon points="140,150 175,14 210,150" fill="#8e2f3c" fill-opacity="0.6"/>
+<polygon points="210,150 245,14 280,150" fill="#f0e6d2" fill-opacity="0.07"/>
+<polygon points="280,150 315,14 350,150" fill="#8e2f3c" fill-opacity="0.6"/>
+<polygon points="350,150 385,14 420,150" fill="#f0e6d2" fill-opacity="0.07"/>
+</g>
+<g fill="#d4af37" stroke="#8e2f3c" stroke-width="2.5">
+<circle cx="35" cy="132" r="13"/><circle cx="35" cy="104" r="13"/>
+<circle cx="105" cy="132" r="13"/><circle cx="105" cy="104" r="13"/>
+<circle cx="175" cy="132" r="13"/><circle cx="175" cy="104" r="13"/>
+<circle cx="245" cy="132" r="13"/><circle cx="245" cy="104" r="13"/><circle cx="245" cy="76" r="13"/>
+<circle cx="315" cy="132" r="13"/><circle cx="315" cy="104" r="13"/><circle cx="315" cy="76" r="13"/>
+<circle cx="385" cy="132" r="13"/><circle cx="385" cy="104" r="13"/><circle cx="385" cy="76" r="13"/>
+</g>
+</svg>
+</div>
+</header>
+
+<div class="rail" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<main class="grid">
+<section aria-labelledby="create-h">
+<h2 id="create-h" class="disp">Oda Oluştur</h2>
+<form id="create-form" class="stack" novalidate>
+<div>
+<label class="lbl" for="create-name">Oyuncu adın</label>
+<input id="create-name" class="inp" type="text" maxlength="30" placeholder="Örn. Ayşe" autocomplete="off" aria-describedby="create-err">
+<p class="err" id="create-err" role="alert" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><path d="M12 16.5v.01"/></svg><span></span></p>
+</div>
+<fieldset>
+<legend class="lbl">Oyun formatı</legend>
+<div class="group c3" role="radiogroup" aria-label="Oyun formatı" data-group="bestOf">
+<button type="button" role="radio" class="opt" aria-checked="false" data-value="1"><i class="chk"></i><span class="tx"><b>Tek El</b><span class="s">1 Puan</span></span></button>
+<button type="button" role="radio" class="opt" aria-checked="true" data-value="3"><i class="chk"></i><span class="tx"><b>3 El</b><span class="s">2 Puana</span></span></button>
+<button type="button" role="radio" class="opt" aria-checked="false" data-value="5"><i class="chk"></i><span class="tx"><b>5 El</b><span class="s">3 Puana</span></span></button>
+</div>
+</fieldset>
+<fieldset>
+<legend class="lbl">Hamle süresi</legend>
+<div class="group c3" role="radiogroup" aria-label="Hamle süresi" data-group="timer">
+<button type="button" role="radio" class="opt" aria-checked="true" data-value="0"><i class="chk"></i><span class="tx"><b>Süresiz</b><span class="s">Rahat oyun</span></span></button>
+<button type="button" role="radio" class="opt" aria-checked="false" data-value="30"><i class="chk"></i><span class="tx"><b>30 sn</b><span class="s">Turnuva</span></span></button>
+<button type="button" role="radio" class="opt" aria-checked="false" data-value="15"><i class="chk"></i><span class="tx"><b>15 sn</b><span class="s">Hızlı mod</span></span></button>
+</div>
+</fieldset>
+<button type="submit" class="btn btn-gold" id="create-btn"><span class="spin hidden" aria-hidden="true"></span><span class="t">Oda Oluştur</span></button>
+
+<div class="bot">
+<p class="bot-title"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M9 13v2"/><path d="M15 13v2"/></svg>Arkadaşın yok mu? Hemen dene</p>
+<fieldset>
+<legend class="lbl">Bot zorluğu</legend>
+<div class="group c2" role="radiogroup" aria-label="Bot zorluğu" data-group="bot">
+<button type="button" role="radio" class="opt" aria-checked="true" data-value="Easy"><i class="chk"></i><span class="tx"><b>Kolay</b><span class="s">Çırak Bot</span></span></button>
+<button type="button" role="radio" class="opt" aria-checked="false" data-value="Master"><i class="chk"></i><span class="tx"><b>Usta</b><span class="s">Usta Bot</span></span></button>
+</div>
+</fieldset>
+<button type="button" class="btn btn-line" id="bot-btn"><span class="spin hidden" aria-hidden="true"></span><svg class="bi" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4"/><path d="M9 13v2"/><path d="M15 13v2"/></svg><span class="t">Yapay Zekâya Karşı Oyna</span></button>
+</div>
+</form>
+</section>
+
+<div class="col-right">
+<section aria-labelledby="join-h">
+<h2 id="join-h" class="disp">Odaya Katıl</h2>
+<form id="join-form" class="stack tight" novalidate>
+<div>
+<label class="lbl" for="join-code">Oda kodu</label>
+<input id="join-code" class="inp mono" type="text" maxlength="8" placeholder="Örn. 7K9M2X" autocomplete="off" autocapitalize="characters" aria-describedby="join-err">
+<p class="err" id="join-err" role="alert" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><path d="M12 16.5v.01"/></svg><span></span></p>
+</div>
+<p class="help">Arkadaşının paylaştığı bağlantıya tıkladıysan doğrudan odaya yönlendirilirsin. Elinde yalnızca kod varsa buraya yaz.</p>
+<button type="submit" class="btn btn-red" id="join-btn">Odaya Katıl</button>
+<p class="help ok" id="join-ok" role="status" hidden></p>
+</form>
+</section>
+
+<section class="hl" aria-labelledby="how-h">
+<h2 id="how-h" class="disp" style="margin-bottom:20px">Nasıl oynanır</h2>
+<ol class="steps">
+<li><span class="disc" aria-hidden="true">1</span><div><strong>Odayı Kur &amp; Paylaş</strong><span class="d">Adını yazıp odayı oluştur, davet linkini arkadaşına gönder.</span></div></li>
+<li><span class="disc" aria-hidden="true">2</span><div><strong>İndir, Sonra Topla</strong><span class="d">Önce hanelerdeki pulları son pula kadar indir, ardından 15 pulu topla.</span></div></li>
+<li><span class="disc" aria-hidden="true">3</span><div><strong>Çift Zar &amp; Mars</strong><span class="d">Çift zar 2×zar hamle verir; rakip indirmedeyken bitirirsen Mars (2 puan)!</span></div></li>
+</ol>
+</section>
+</div>
+</main>
+
+<footer>Üyelik gerekmez — misafir olarak oyna. Zarlar sunucuda güvenle atılır.</footer>
+</div>
+
+<dialog class="rules" id="rules" aria-labelledby="rules-h">
+<div class="hd"><h3 id="rules-h" class="disp">Kız Tavlası Kuralları</h3><button type="button" class="ibtn" id="rules-close" aria-label="Kuralları kapat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>
+<div class="rbody" id="rules-body" tabindex="0" role="region" aria-label="Kural metni">
+<p>Her oyuncunun 15 pulu ve 1'den 6'ya numaralı altı hanesi vardır. Başlangıçta 1–3. hanelerde ikişer, 4–6. hanelerde üçer pul bulunur.</p>
+<p>Sıran geldiğinde <strong>Zar At</strong>'a bas, sonra <strong class="g">parlayan haneye dokunarak</strong> hamleni kendin yap.</p>
+<p><strong>1) İndirme:</strong> Zarın gösterdiği haneden bir pul indirilir. Her hanede <strong>son pul inmez</strong> (toplam 9 indirme). O hanede inecek pul yoksa zar boşa gider.</p>
+<p><strong>2) Toplama:</strong> 9 indirme bitince başlar. Zarın gösterdiği haneden bir pul toplanır; hane boşsa zar boşa gider.</p>
+<p><strong class="g">Çift zar = 2×zar hamle:</strong> 5-5 atarsan 10 hamle yaparsın. İlk hamle çift atılan haneden zorunludur; o hane oynanamıyorsa el boşa gider. Kalan hakları istediğin hanelerden kullanırsın.</p>
+<p><strong class="g">MARS:</strong> Sen bitirdiğinde rakip hâlâ indirme aşamasındaysa 1 yerine <strong>2 puan</strong> alırsın.</p>
+<p>Maç formatları: tek el (1 puan), 3 el üzerinden (2 puan), 5 el üzerinden (3 puan). Sonraki ele kaybeden başlar.</p>
+</div>
+</dialog>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  var state = { loading: null, sound: true };
+  var nameInput = $('#create-name'), codeInput = $('#join-code');
+  var createBtn = $('#create-btn'), botBtn = $('#bot-btn');
+
+  // Mevcut HomePage.tsx zod şemalarıyla aynı kurallar ve mesajlar.
+  function validateName(v) {
+    var t = v.trim();
+    if (t.length < 2) return 'Oyuncu adı en az 2 karakter olmalıdır.';
+    if (t.length > 30) return 'Oyuncu adı en fazla 30 karakter olabilir.';
+    return null;
+  }
+  function validateCode(v) {
+    return /^[a-zA-Z0-9]{6,8}$/.test(v.trim()) ? null : 'Oda kodu 6-8 karakterli harf ve rakamlardan oluşur.';
+  }
+
+  function showError(input, errEl, msg) {
+    if (msg) {
+      errEl.querySelector('span').textContent = msg;
+      errEl.hidden = false;
+      input.setAttribute('aria-invalid', 'true');
+    } else {
+      errEl.hidden = true;
+      input.removeAttribute('aria-invalid');
+    }
+  }
+
+  // Seçenek grupları (role="radiogroup"): tekli seçim + ok tuşları.
+  $$('.group').forEach(function (g) {
+    var items = $$('.opt', g);
+    function select(btn) {
+      items.forEach(function (b) { b.setAttribute('aria-checked', b === btn ? 'true' : 'false'); b.tabIndex = b === btn ? 0 : -1; });
+    }
+    items.forEach(function (b) {
+      b.tabIndex = b.getAttribute('aria-checked') === 'true' ? 0 : -1;
+      b.addEventListener('click', function () { select(b); });
+      b.addEventListener('keydown', function (e) {
+        var i = items.indexOf(b), n = null;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = items[(i + 1) % items.length];
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = items[(i - 1 + items.length) % items.length];
+        if (n) { e.preventDefault(); select(n); n.focus(); }
+      });
+    });
+  });
+
+  // Loading yalnızca oda oluşturma/bot akışına ait alanları kilitler.
+  // "Odaya Katıl" bağımsız bir eylem olduğu için kilitlenmez.
+  function setLoading(mode) {
+    state.loading = mode;
+    var busy = !!mode;
+    nameInput.disabled = busy;
+    $$('.opt').forEach(function (b) { b.disabled = busy; });
+    [[createBtn, 'friend', 'Oda oluşturuluyor…', 'Oda Oluştur'], [botBtn, 'bot', 'Masa hazırlanıyor…', 'Yapay Zekâya Karşı Oyna']].forEach(function (x) {
+      var btn = x[0], on = mode === x[1];
+      btn.disabled = busy;
+      if (on) btn.setAttribute('aria-busy', 'true'); else btn.removeAttribute('aria-busy');
+      $('.spin', btn).classList.toggle('hidden', !on);
+      var ic = $('.bi', btn); if (ic) ic.classList.toggle('hidden', on);
+      $('.t', btn).textContent = on ? x[2] : x[3];
+    });
+  }
+
+  function submitCreate(mode) {
+    if (state.loading) return;
+    var msg = validateName(nameInput.value);
+    showError(nameInput, $('#create-err'), msg);
+    if (msg) { nameInput.focus(); return; }
+    setLoading(mode);
+    // Prototip: gerçek istek yok, yalnızca yükleniyor durumunu gösterir.
+    setTimeout(function () { setLoading(null); }, 2600);
+  }
+
+  nameInput.addEventListener('input', function () { if (!$('#create-err').hidden) showError(nameInput, $('#create-err'), validateName(nameInput.value)); });
+  $('#create-form').addEventListener('submit', function (e) { e.preventDefault(); submitCreate('friend'); });
+  botBtn.addEventListener('click', function () { submitCreate('bot'); });
+
+  codeInput.addEventListener('input', function () {
+    codeInput.value = codeInput.value.toUpperCase();
+    $('#join-ok').hidden = true;
+    if (!$('#join-err').hidden) showError(codeInput, $('#join-err'), validateCode(codeInput.value));
+  });
+  $('#join-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var msg = validateCode(codeInput.value);
+    showError(codeInput, $('#join-err'), msg);
+    var ok = $('#join-ok');
+    if (msg) { ok.hidden = true; codeInput.focus(); return; }
+    ok.textContent = 'Prototip: gerçek uygulamada /oda/' + codeInput.value.trim().toUpperCase() + ' sayfasına yönlendirilirsin.';
+    ok.hidden = false;
+  });
+
+  $('#sound-btn').addEventListener('click', function () {
+    state.sound = !state.sound;
+    this.setAttribute('aria-label', state.sound ? 'Sesi kapat' : 'Sesi aç');
+    $('#ico-on').classList.toggle('hidden', !state.sound);
+    $('#ico-off').classList.toggle('hidden', state.sound);
+  });
+
+  // Kurallar: modal + açıkça yönetilen odak tuzağı (Tab / Shift+Tab pencere içinde döner).
+  var dlg = $('#rules');
+  function focusables() { return $$('button, [tabindex="0"]', dlg).filter(function (el) { return !el.disabled; }); }
+  $('#rules-btn').addEventListener('click', function () {
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+    $('#rules-close').focus();
+  });
+  $('#rules-close').addEventListener('click', function () { dlg.close(); });
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+  dlg.addEventListener('keydown', function (e) {
+    if (e.key !== 'Tab') return;
+    var f = focusables(); if (!f.length) return;
+    var first = f[0], last = f[f.length - 1], a = document.activeElement;
+    if (!dlg.contains(a)) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && a === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && a === last) { e.preventDefault(); first.focus(); }
+  });
+})();
+</script>
+</body>
+</html>

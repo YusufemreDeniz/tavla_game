@@ -22,6 +22,19 @@ export default defineConfig({
   build: {
     outDir: '../KizTavlasi.Api/wwwroot',
     emptyOutDir: true,
+    rolldownOptions: {
+      output: {
+        // Uzun ömürlü vendor parçaları: uygulama kodu değiştiğinde tarayıcı önbelleği korunur.
+        codeSplitting: {
+          groups: [
+            { name: 'react', test: /node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/, priority: 30 },
+            { name: 'motion', test: /node_modules[\\/](framer-motion|motion-dom|motion-utils)[\\/]/, priority: 20 },
+            { name: 'signalr', test: /node_modules[\\/]@microsoft[\\/]signalr[\\/]/, priority: 20 },
+            { name: 'vendor', test: /node_modules[\\/]/, priority: 10 },
+          ],
+        },
+      },
+    },
   },
   test: {
     environment: 'jsdom',

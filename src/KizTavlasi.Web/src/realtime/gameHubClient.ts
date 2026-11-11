@@ -5,6 +5,7 @@ import {
   LogLevel,
 } from '@microsoft/signalr';
 import { useGameStore } from '../store/gameStore';
+import { newCommandId } from '../lib/uuid';
 import type {
   DiceRollResultDto,
   MatchEndedDto,
@@ -153,6 +154,10 @@ export class GameHubClient {
       },
     );
 
+    connection.on('SpectatorCountChanged', (payload: { roomCode: string; count: number }) => {
+      store().setSpectatorCount(payload.count);
+    });
+
     // Snapshot zaten GameStateUpdated ile geliyor; bu eventler ayrıca bir işlem gerektirmiyor.
     connection.on('PlayerJoined', () => {});
     connection.on('PlayerLeft', () => {});
@@ -182,12 +187,12 @@ export class GameHubClient {
   }
 
   startMatch(): Promise<void> {
-    return this.ensureConnected().invoke('StartMatch', { commandId: crypto.randomUUID() });
+    return this.ensureConnected().invoke('StartMatch', { commandId: newCommandId() });
   }
 
   rollDice(expectedStateVersion: number): Promise<void> {
     return this.ensureConnected().invoke('RollDice', {
-      commandId: crypto.randomUUID(),
+      commandId: newCommandId(),
       expectedStateVersion,
     });
   }
@@ -196,7 +201,7 @@ export class GameHubClient {
     return this.ensureConnected().invoke('PlayMove', {
       pointNumber,
       expectedStateVersion,
-      commandId: crypto.randomUUID(),
+      commandId: newCommandId(),
     });
   }
 

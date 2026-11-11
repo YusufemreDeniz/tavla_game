@@ -1,6 +1,9 @@
 @import 'tailwindcss';
+@import './styles/tokens.css';
+@import './styles/fonts.css';
 
-@theme {
+/* `static`: palet değişkenleri her zaman :root'a yazılır (tokens.css semantic katmanı var() ile bu paleti kullanır). */
+@theme static {
   --color-night-950: #0e111a;
   --color-night-900: #141826;
   --color-night-800: #1c2133;
@@ -55,22 +58,25 @@ body {
   }
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-gold-400);
-  outline-offset: 2px;
+/*
+ * Global klavye odağı. `@layer base` içinde olmalı: katmansız (unlayered) kurallar katmanlı Tailwind
+ * yardımcılarını (utilities) özgüllükten bağımsız ezer; base katmanında ise bileşenler `focus-visible:outline-*`
+ * yardımcılarıyla (UI bileşenlerinin 3 px altın halkası) `!important` olmadan üzerine yazabilir.
+ * Yardımcı sınıfı olmayan öğelerde (oyun ekranları dahil) hesaplanan değer değişmez: 2 px altın, 2 px offset.
+ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-gold-400);
+    outline-offset: 2px;
+  }
 }
 
 /* Oyun animasyonları: framer-motion yerine hafif CSS keyframe'leri (performans). */
-@keyframes piece-pop {
-  0% {
-    transform: scale(0.2);
+@keyframes piece-in {
+  from {
     opacity: 0;
   }
-  70% {
-    transform: scale(1.12);
-  }
-  100% {
-    transform: scale(1);
+  to {
     opacity: 1;
   }
 }
@@ -84,16 +90,6 @@ body {
   }
 }
 
-@keyframes pulse-gold {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
 @keyframes turn-dot {
   0%,
   100% {
@@ -104,18 +100,83 @@ body {
   }
 }
 
-.anim-piece-pop {
-  animation: piece-pop 0.22s ease-out;
+/* Pullar hareketini FLIP uçuş katmanından alır; burada yalnızca (yeni el gibi) ilk belirme yumuşatılır. */
+.anim-piece-in {
+  animation: piece-in 0.18s ease-out;
 }
 
 .anim-point-flash {
   animation: point-flash 0.9s ease-out forwards;
 }
 
-.anim-pulse-gold {
-  animation: pulse-gold 1s ease-in-out infinite;
-}
-
 .anim-turn-dot {
   animation: turn-dot 1.6s ease-in-out infinite;
+}
+
+/* Hayalet pul (hamle önizlemesi): yavaşça nefes alır. */
+@keyframes ghost-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+
+.anim-ghost {
+  animation: ghost-breathe 1.2s ease-in-out infinite;
+}
+
+/* Uçuş katmanı pulu taşırken hedefteki gerçek pul gizlenir (FLIP). */
+[data-piece][data-landing] {
+  visibility: hidden;
+}
+
+/* Hamle süresinin son 5 saniyesi: zarif nabız. */
+@keyframes timer-urgent {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgba(224, 82, 82, 0));
+  }
+  50% {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 6px rgba(224, 82, 82, 0.75));
+  }
+}
+
+.anim-timer-urgent {
+  animation: timer-urgent 1s ease-in-out infinite;
+}
+
+/* Oynanabilir (veya az önce oynanan) hanenin üçgeninde yumuşak, sabit ışık. */
+.point-glow {
+  opacity: 0;
+  transition: opacity 0.35s ease-out;
+}
+
+.point-glow[data-glow='on'] {
+  opacity: 1;
+}
+
+@keyframes point-glow-flash {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.point-glow-flash {
+  animation: point-glow-flash 0.9s ease-out forwards;
+}
+
+/* Masaüstünde tahta masaya çok hafif perspektifle bakılır; telefonda düz kalır. */
+@media (min-width: 768px) {
+  .board-tilt {
+    transform: perspective(1700px) rotateX(5deg);
+    transform-origin: 50% 100%;
+  }
 }

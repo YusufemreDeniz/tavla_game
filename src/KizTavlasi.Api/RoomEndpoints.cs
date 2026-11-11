@@ -24,6 +24,24 @@ public static class RoomEndpoints
             return Results.Ok(result);
         }).RequireRateLimiting("room-create");
 
+        rooms.MapPost("/bot", async (
+            CreateBotRoomRequest request,
+            IValidator<CreateBotRoomRequest> validator,
+            RoomService roomService,
+            CancellationToken ct) =>
+        {
+            await ValidateAsync(validator, request, ct);
+            var result = await roomService.CreateBotRoomAsync(request, ct);
+            return Results.Ok(result);
+        }).RequireRateLimiting("room-create");
+
+        // Dolu odayı salt okunur izleme: oyuncu koltuğu açmaz, yalnızca izleyici token'ı verir.
+        rooms.MapPost("/{roomCode}/watch", async (string roomCode, RoomService roomService, CancellationToken ct) =>
+        {
+            var result = await roomService.WatchRoomAsync(roomCode, ct);
+            return Results.Ok(result);
+        }).RequireRateLimiting("room-join");
+
         rooms.MapPost("/{roomCode}/join", async (
             string roomCode,
             JoinRoomRequest request,
@@ -48,6 +66,29 @@ public static class RoomEndpoints
             await roomService.ValidateSessionAsync(session, ct);
             var state = await roomService.GetRoomStateAsync(session, ct);
             return Results.Ok(state);
+        }).RequireAuthorization();
+
+        // Maç analitiği: oyuncular ve izleyiciler okuyabilir (salt okunur).
+        rooms.MapGet("/{roomCode}/stats", async (string roomCode, HttpContext context, RoomService roomService, MatchStatsService statsService, CancellationToken ct) =>
+        {
+            Guid roomId;
+            if (PlayerSessionResolver.IsSpectator(context.User))
+            {
+                var spectator = PlayerSessionResolver.ResolveSpectator(context.User);
+                if (!string.Equals(spectator.RoomCode, roomCode.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new GameDomainException(DomainErrorCodes.PlayerNotInRoom, "Bu odaya erişim yetkiniz yok.");
+                }
+                roomId = spectator.RoomId;
+            }
+            else
+            {
+                var session = ResolveSessionForRoom(context, roomCode);
+                await roomService.ValidateSessionAsync(session, ct);
+                roomId = session.RoomId;
+            }
+            var stats = await statsService.GetCurrentMatchStatsAsync(roomId, ct);
+            return Results.Ok(stats);
         }).RequireAuthorization();
 
         rooms.MapPost("/{roomCode}/leave", async (string roomCode, HttpContext context, RoomService roomService, CancellationToken ct) =>
@@ -90,7 +131,8 @@ public static class RoomEndpoints
             var config = new PublicConfigDto(
                 branding.Value.ProductName,
                 GameConstants.SupportedBestOf,
-                GameConstants.AllowedReactions);
+                GameConstants.AllowedReactions,
+                GameConstants.SupportedTurnTimeLimits);
             return Results.Ok(config);
         }).WithTags("Config");
     }

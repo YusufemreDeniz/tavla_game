@@ -69,3 +69,23 @@ Bu doküman, **Aşama 1 — Audit & Baseline** kapsamında gerçek kaynak kodunu
 - **Dosya:** `src/KizTavlasi.Domain/GameEngine.cs`
 - **Kök Neden:** Çift olmayan zarda oyuncunun indirme aşamasında yalnızca 1 indirilecek pulu kaldığında (ör. 6. hanede 2 inmemiş pul varken `(3, 6)` atıldığında), `ResolveRoll` iki zarı da indirme kurallarıyla değerlendirip `3` zarını `Wasted` sayıyordu.
 - **Uygulanan Çözüm:** `remainingBringDowns == 1` durumunda, zarlardan biri 9. pulu indirerek oyuncuyu toplama aşamasına geçiriyorsa diğer zarın toplama aşamasında oynanabilirliği kontrol edilerek `PlayableDice` listesine (önce indirme zarı, sonra toplama zarı sırasıyla) eklendi.
+
+---
+
+## 3. Next-Level Roadmap Sonrası Test Durumu
+
+| Katman | Komut | Önce | Sonra |
+|--------|-------|------|-------|
+| Domain | `dotnet test tests/KizTavlasi.Domain.Tests` | 49 | ✅ **60** (+`BotStrategy`: geçerlilik, tam el simülasyonu, Usta ≤ Kolay boşa zar) |
+| Application | `dotnet test tests/KizTavlasi.Application.Tests` | 32 | ✅ **46** (+otomasyon zamanlaması, idempotency, hamle süresi, bot rövanşı, bot odası yaşam döngüsü, izleyici token'ı, maç analitiği) |
+| Integration | `dotnet test tests/KizTavlasi.IntegrationTests` | 19 | ✅ **23** (+gerçek arka plan servisiyle bot hamlesi, izleyici salt okunurluğu, istatistik yetkilendirmesi) |
+| Frontend birim | `npm run test` | 21 | ✅ **58** (+FLIP/önizleme, zar tepsisi, QR — bağımsız `jsqr` çözücüsüyle, bot/izleyici/süre arayüzü, istatistik paneli) |
+| Tip / Lint | `npm run typecheck` · `npm run lint` | ✅ | ✅ 0 hata, 0 uyarı |
+| E2E | `npm run e2e` | 3 | ✅ **4** (+tarayıcıda bota karşı tam maç, eşzamanlı izleyici, istatistik paneli ve bot rövanşı) |
+| Paket | `vite build` | 567 kB tek parça (uyarı) | ✅ en büyük parça 231 kB (React); oda ekranı ve SignalR yalnızca odaya girilince yüklenir |
+
+### Bu turda bulunan ve giderilen sorunlar
+- **İzleyici claim eşlemesi:** `role` claim'i JwtBearer tarafından `ClaimTypes.Role`'e eşlendiği için REST uçlarında
+  izleyici tanınmıyordu (401). Claim adı `access` yapıldı; entegrasyon testi 403'ü doğrular.
+- **DB kaynaklı UTC zamanı:** `Round.TurnDeadlineUtc` DB'den `Kind=Unspecified` okunur ve "Z" eki olmadan serileşirdi;
+  istemci yerel saat sanabilirdi. Snapshot'ta `DateTimeKind.Utc` atanır, istemci de eksiz değeri UTC kabul eder.

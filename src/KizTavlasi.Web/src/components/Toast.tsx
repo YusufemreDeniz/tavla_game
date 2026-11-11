@@ -19,8 +19,8 @@ export default function Toast() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 24 }}
-          role="status"
-          aria-live="polite"
+          // Hata: role="alert" (örtük assertive; ek aria-live verilmez). Bilgi: role="status" + polite.
+          {...(toast.kind === 'error' ? { role: 'alert' } : { role: 'status', 'aria-live': 'polite' })}
           className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl px-5 py-3 text-sm font-medium shadow-2xl ${
             toast.kind === 'error'
               ? 'bg-bordo-600 text-cream-50'

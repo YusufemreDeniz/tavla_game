@@ -53,6 +53,13 @@ public static class DependencyInjection
         services.AddSingleton(new GameEngine(GameRulesOptions.Default));
         services.AddScoped<RoomService>();
         services.AddScoped<GameService>();
+        services.AddScoped<TurnAutomationRunner>();
+        services.AddScoped<MatchStatsService>();
+
+        // Tek örnek: hem zamanlayıcı arayüzü (GameService commit sonrası çağırır) hem arka plan servisi.
+        services.AddSingleton<TurnAutomationService>();
+        services.AddSingleton<ITurnAutomationScheduler>(sp => sp.GetRequiredService<TurnAutomationService>());
+        services.AddHostedService(sp => sp.GetRequiredService<TurnAutomationService>());
 
         services.AddHostedService<RoomCleanupService>();
 
