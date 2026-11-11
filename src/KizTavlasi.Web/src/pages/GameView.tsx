@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bot, Eye, Home, RotateCcw, Sparkles, Trophy, WifiOff } from 'lucide-react';
+import { Dices, Eye, Home, RotateCcw, Sparkles, Trophy, WifiOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { MatchStatsDto, RoomSnapshotDto } from '../types/game';
 import { useGameStore } from '../store/gameStore';
@@ -10,7 +10,9 @@ import DiceArena, { type DiceImpact } from '../components/DiceArena';
 import TurnTimer from '../components/TurnTimer';
 import MatchStatsPanel from '../components/MatchStatsPanel';
 import BackgammonBoard, { type PointFlash } from '../components/BackgammonBoard';
-import ConnectionDot from '../components/ConnectionDot';
+import { DiceStatus } from '../components/game/DiceStatus';
+import { PlayerCard } from '../components/game/PlayerCard';
+import { Badge, Button, Notice, Panel } from '../components/ui';
 import ShareLinkCard from '../components/ShareLinkCard';
 import MarsCelebration from '../components/MarsCelebration';
 import { ReactionsBar } from '../components/ReactionsBar';
@@ -406,9 +408,28 @@ export default function GameView({
     currentPlayer !== null &&
     !currentPlayer.isBot;
 
+  const renderSeatCard = (seat: number) => {
+    const player = players.find((p) => p.seat === seat);
+    return (
+      <PlayerCard
+        seat={seat}
+        name={player?.displayName ?? '—'}
+        isConnected={player?.isConnected ?? false}
+        isActive={seatOf(round?.currentPlayerId) === seat && !matchCompleted}
+        isMe={player?.id === myPlayerId}
+        isBot={Boolean(player?.isBot)}
+        checkerColor={player?.id === viewerId ? '#8e2f3c' : '#f2e8d2'}
+        alignRight={seat === 2}
+      />
+    );
+  };
+
   // Kontroller tahtanın dışında: telefonda ekranın altına yapışık, masaüstünde tahtanın altında.
   const controlBar = (
-    <div className="sticky bottom-2 z-30 flex w-full items-center justify-between gap-2 rounded-2xl border border-gold-500/20 bg-night-800/95 px-3 py-2.5 shadow-xl backdrop-blur md:static md:gap-4 md:px-4">
+    <Panel
+      padding="none"
+      className="sticky bottom-2 z-30 flex w-full items-center justify-between gap-2 border-line-accent/60 bg-surface-raised/95 px-3 py-2.5 font-ui shadow-plate backdrop-blur md:static md:gap-4 md:px-4"
+    >
       {showTimer && round?.turnDeadlineUtc && (
         <TurnTimer
           key={round.turnDeadlineUtc}
@@ -419,90 +440,75 @@ export default function GameView({
           soundEnabled={soundEnabled}
         />
       )}
+      {displayedDice && <DiceStatus dice={displayedDice} used={diceUsed} />}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[11px] font-medium text-cream-100 md:text-sm" role="status">
+        <p className="text-caption font-medium text-fg-primary [overflow-wrap:anywhere] md:text-ui" role="status">
           {statusText}
         </p>
         {totalRemainingMoves > 0 && (
-          <p className="mt-0.5 text-[10px] font-semibold text-gold-400">
-            Kalan hamle hakkı: {totalRemainingMoves}
-          </p>
+          <p className="mt-0.5 text-micro font-semibold text-fg-accent">Kalan hamle hakkı: {totalRemainingMoves}</p>
         )}
       </div>
 
       {!matchCompleted && spectator && (
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-gold-500/30 bg-night-900/70 px-2.5 py-1 text-[11px] font-semibold text-gold-400">
-          <Eye size={13} aria-hidden="true" />
+        <Badge tone="accent" icon={<Eye size={13} />} className="shrink-0 font-semibold">
           İzleyici
-        </span>
+        </Badge>
       )}
       {!matchCompleted && !spectator && (
-        <button
-          type="button"
+        <Button
           onClick={handleRoll}
           disabled={!isMyTurn || rollInProgress || Boolean(rollingPlayerId) || iMustMove}
+          size="sm"
+          loading={rollInProgress}
+          loadingLabel="Atılıyor…"
+          icon={<Dices size={18} />}
           aria-label="Zar at"
-          className={`min-h-11 shrink-0 rounded-xl px-3.5 py-2 text-sm font-bold shadow-lg transition-all md:px-6 md:text-base ${
-            isMyTurn && !rollInProgress && !iMustMove
-              ? 'bg-gradient-to-r from-copper-500 via-bordo-600 to-bordo-700 text-cream-50 ring-1 ring-gold-500/40 hover:scale-[1.03]'
-              : 'cursor-not-allowed bg-night-900/70 text-cream-400/50'
-          }`}
+          className="shrink-0 md:min-h-(--size-button) md:px-6 md:text-body"
         >
-          {rollInProgress ? 'Atılıyor…' : 'Zar At'}
-        </button>
+          Zar At
+        </Button>
       )}
-    </div>
+    </Panel>
   );
 
   return (
     <div className="space-y-3 md:space-y-4">
       {/* Skor çubuğu */}
       {match && (
-        <section
+        <Panel
+          as="section"
           aria-label="Skor"
-          className="flex items-center justify-between rounded-2xl border border-gold-500/20 bg-gradient-to-b from-night-800 to-night-900 px-3.5 py-2 shadow-lg md:px-5"
+          padding="none"
+          className="grid grid-cols-2 items-center gap-1 border-line-accent/50 px-2 py-2 shadow-plate sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:px-4"
         >
-          <PlayerScore
-            isBot={players.find((p) => p.seat === 1)?.isBot}
-            name={players.find((p) => p.seat === 1)?.displayName ?? '—'}
-            isConnected={players.find((p) => p.seat === 1)?.isConnected ?? false}
-            isTurn={seatOf(round?.currentPlayerId) === 1 && !matchCompleted}
-            isMe={players.find((p) => p.seat === 1)?.id === myPlayerId}
-          />
-          <div className="px-2 text-center">
-            <p className="font-display text-2xl font-bold text-gold-400 md:text-3xl" aria-label={`Skor: ${scoreLabel}`}>
+          {renderSeatCard(1)}
+          {/* Dar ekranda skor üst satıra alınır (yalnızca görsel sıra; DOM sırası kart · skor · kart kalır). */}
+          <div className="order-first col-span-2 px-1 text-center sm:order-none sm:col-span-1 md:px-3">
+            <p
+              className="font-brand text-heading-md leading-none font-semibold text-fg-accent md:text-heading-lg"
+              aria-label={`Skor: ${scoreLabel}`}
+            >
               {scoreLabel}
             </p>
-            <p className="text-[10px] uppercase tracking-wider text-cream-300">
+            <p className="mt-1 text-micro whitespace-nowrap text-fg-secondary">
               {match.bestOf === 1 ? 'Tek el' : `${match.requiredWins} puana`} ·{' '}
               {round ? `${round.roundNumber}. el · Tur ${round.turnNumber}` : 'Maç bitti'}
             </p>
           </div>
-          <PlayerScore
-            isBot={players.find((p) => p.seat === 2)?.isBot}
-            name={players.find((p) => p.seat === 2)?.displayName ?? '—'}
-            isConnected={players.find((p) => p.seat === 2)?.isConnected ?? false}
-            isTurn={seatOf(round?.currentPlayerId) === 2 && !matchCompleted}
-            isMe={players.find((p) => p.seat === 2)?.id === myPlayerId}
-            alignRight
-          />
-        </section>
+          {renderSeatCard(2)}
+        </Panel>
       )}
 
       {/* Rakip bağlantı kesintisi bilgi çubuğu */}
       <AnimatePresence>
         {opponent && !opponent.isConnected && !matchCompleted && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            role="status"
-            className="flex items-center justify-center gap-2 rounded-xl border border-amber-500/35 bg-amber-950/40 px-4 py-2 text-xs text-amber-200"
-          >
-            <WifiOff size={14} className="shrink-0 text-amber-400" aria-hidden="true" />
-            <span>
-              <strong>{opponent.displayName}</strong> bağlantısı koptu. Odaya yeniden bağlanması bekleniyor…
-            </span>
+          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} role="status">
+            <Notice icon={<WifiOff size={16} />} className="border-line-accent py-2.5 text-ui-sm">
+              <span>
+                <strong>{opponent.displayName}</strong> bağlantısı koptu. Odaya yeniden bağlanması bekleniyor…
+              </span>
+            </Notice>
           </motion.div>
         )}
       </AnimatePresence>
@@ -514,18 +520,18 @@ export default function GameView({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden rounded-xl border border-gold-500/25 bg-night-800 px-4 py-3 text-center text-sm text-cream-200"
+            className="overflow-hidden rounded-control border border-line-accent/60 bg-surface-raised px-4 py-3 text-center font-ui text-ui-sm text-fg-secondary"
             role="status"
           >
             {startingRoll.attempts.map((attempt, index) => (
               <span key={index} className="mx-1 inline-flex items-center gap-1">
                 <Die value={attempt.player1Die} size={22} />
-                <span className="text-cream-400">–</span>
+                <span className="text-fg-muted">–</span>
                 <Die value={attempt.player2Die} size={22} />
-                {attempt.isTie && <span className="text-xs text-cream-400">(eşit, tekrar)</span>}
+                {attempt.isTie && <span className="text-micro text-fg-muted">(eşit, tekrar)</span>}
               </span>
             ))}
-            <p className="mt-1 font-medium text-gold-400">
+            <p className="mt-1 font-medium text-fg-accent">
               {players.find((p) => p.id === startingRoll.startingPlayerId)?.displayName} başlıyor!
             </p>
           </motion.div>
@@ -588,7 +594,7 @@ export default function GameView({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 flex items-center justify-center bg-night-950/70 p-4"
+            className="fixed inset-0 z-40 flex items-center justify-center bg-surface-overlay/70 p-4"
           >
             <motion.div
               initial={{ scale: 0.85, y: 16 }}
@@ -596,19 +602,19 @@ export default function GameView({
               exit={{ scale: 0.9, opacity: 0 }}
               role="alertdialog"
               aria-label="El sonucu"
-              className="rounded-2xl border border-gold-500/30 bg-night-800 px-8 py-6 text-center shadow-2xl"
+              className="max-w-full rounded-dialog bg-surface-raised px-6 py-6 text-center font-ui shadow-dialog md:px-8"
             >
-              <Trophy size={36} className="mx-auto mb-2 text-gold-400" aria-hidden="true" />
-              <p className="font-display text-xl font-bold text-cream-50">
+              <Trophy size={36} className="mx-auto mb-2 text-fg-accent" aria-hidden="true" />
+              <p className="font-brand text-heading-md font-semibold text-fg-primary">
                 {lastRoundEnded.roundNumber}. eli {roundWinner.displayName} kazandı!
               </p>
               {lastRoundEnded.isMars && (
-                <p className="mt-1 text-lg font-black tracking-wider text-gold-400">MARS — 2 PUAN! 😂</p>
+                <p className="mt-1 text-body-lg font-bold tracking-wider text-fg-accent">MARS — 2 PUAN! 😂</p>
               )}
-              <p className="mt-1 text-sm text-cream-300">
+              <p className="mt-1 text-ui text-fg-secondary">
                 Skor: {lastRoundEnded.player1Score} - {lastRoundEnded.player2Score}
               </p>
-              <p className="mt-3 text-xs text-cream-400">Sonraki el başlıyor…</p>
+              <p className="mt-3 text-caption text-fg-muted">Sonraki el başlıyor…</p>
             </motion.div>
           </motion.div>
         )}
@@ -620,29 +626,28 @@ export default function GameView({
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-night-950/85 p-4"
+            className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-surface-overlay/85 p-4"
           >
             <motion.div
               initial={{ scale: 0.85, y: 24 }}
               animate={{ scale: 1, y: 0 }}
               role="dialog"
               aria-label="Maç sonucu"
-              className="relative w-full max-w-md overflow-hidden rounded-2xl border border-gold-500/35 bg-night-800 p-6 text-center shadow-2xl"
+              className="relative max-h-full w-full max-w-md overflow-hidden overflow-y-auto rounded-dialog bg-surface-raised p-6 text-center font-ui shadow-dialog"
             >
               <Confetti />
-              <Trophy size={48} className="mx-auto mb-3 text-gold-400" aria-hidden="true" />
-              <h2 className="font-display text-2xl font-bold text-cream-50">
+              <Trophy size={48} className="mx-auto mb-3 text-fg-accent" aria-hidden="true" />
+              <h2 className="font-brand text-heading-md font-semibold text-fg-primary">
                 {!spectator && winnerPlayer.id === myPlayerId
                   ? 'Tebrikler, kazandın!'
                   : `${winnerPlayer.displayName} maçı kazandı`}
               </h2>
               {lastMatchEnded?.isMars && (
-                <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-gold-500/20 px-3 py-1 text-sm font-black tracking-wider text-gold-400">
-                  <Sparkles size={14} aria-hidden="true" />
+                <Badge tone="accent" icon={<Sparkles size={14} />} className="mt-1 text-ui-sm font-bold tracking-wider">
                   MARS'LA BİTTİ! (2 Puan)
-                </p>
+                </Badge>
               )}
-              <p className="mt-2 text-lg font-bold text-gold-400">
+              <p className="mt-2 font-brand text-body-lg font-semibold text-fg-accent">
                 Final skor: {match?.player1Score} - {match?.player2Score}
               </p>
 
@@ -652,20 +657,20 @@ export default function GameView({
               )}
 
               {/* Maç İstatistik Özeti */}
-              <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl border border-night-600 bg-night-900/80 p-3 text-xs">
+              <div className="mt-3 grid grid-cols-3 gap-2 rounded-control border border-line-subtle bg-surface-input p-3 text-caption">
                 <div>
-                  <span className="block text-[10px] uppercase text-cream-400">Maç No</span>
-                  <span className="font-mono text-sm font-bold text-cream-100">#{match?.matchNumber ?? 1}</span>
+                  <span className="block text-micro uppercase text-fg-muted">Maç No</span>
+                  <span className="font-code text-ui-sm font-semibold text-fg-primary">#{match?.matchNumber ?? 1}</span>
                 </div>
                 <div>
-                  <span className="block text-[10px] uppercase text-cream-400">Format</span>
-                  <span className="font-semibold text-cream-100">
+                  <span className="block text-micro uppercase text-fg-muted">Format</span>
+                  <span className="font-semibold text-fg-primary">
                     {match?.bestOf === 1 ? 'Tek El' : `${match?.requiredWins} Puana`}
                   </span>
                 </div>
                 <div>
-                  <span className="block text-[10px] uppercase text-cream-400">Sonuç</span>
-                  <span className="font-semibold text-gold-400">
+                  <span className="block text-micro uppercase text-fg-muted">Sonuç</span>
+                  <span className="font-semibold text-fg-accent">
                     {lastMatchEnded?.isMars ? 'Mars (2P)' : 'Normal'}
                   </span>
                 </div>
@@ -673,57 +678,45 @@ export default function GameView({
 
               <div className="mt-6 space-y-2.5">
                 {spectator ? (
-                  <p className="rounded-xl border border-night-600 px-4 py-3 text-sm text-cream-300" role="status">
+                  <Notice role="status">
                     Maçı izlediğin için teşekkürler! Oyuncular rövanşa karar verirse yeni maç burada başlar.
-                  </p>
+                  </Notice>
                 ) : rematchRequestedByOpponent ? (
                   <>
-                    <p className="text-sm font-medium text-gold-400">Rakibin rövanş istiyor!</p>
+                    <p className="text-ui font-medium text-fg-accent">Rakibin rövanş istiyor!</p>
                     <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={onAcceptRematch}
-                        className="min-h-11 flex-1 rounded-xl bg-bordo-600 px-4 py-3 font-semibold text-cream-50 hover:bg-bordo-500"
-                      >
+                      <Button variant="secondary" onClick={onAcceptRematch} className="flex-1">
                         Kabul Et
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onDeclineRematch}
-                        className="min-h-11 flex-1 rounded-xl border border-night-600 px-4 py-3 font-semibold text-cream-300 hover:bg-night-700"
-                      >
+                      </Button>
+                      <Button variant="ghost" onClick={onDeclineRematch} className="min-h-(--size-button) flex-1">
                         Reddet
-                      </button>
+                      </Button>
                     </div>
                   </>
                 ) : rematchRequestedByMe ? (
-                  <p className="rounded-xl border border-night-600 px-4 py-3 text-sm text-cream-300" role="status">
+                  <Notice role="status">
                     {opponent?.isBot
                       ? `${opponent.displayName} rövanşı kabul ediyor…`
                       : 'Rövanş isteği gönderildi, rakip bekleniyor…'}
-                  </p>
+                  </Notice>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={onRequestRematch}
-                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-bordo-600 to-bordo-700 px-4 py-3 font-semibold text-cream-50 hover:scale-[1.01]"
-                  >
-                    <RotateCcw size={18} aria-hidden="true" />
+                  <Button variant="primary" fullWidth icon={<RotateCcw size={18} />} onClick={onRequestRematch}>
                     Rövanş İste
-                  </button>
+                  </Button>
                 )}
 
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  fullWidth
+                  icon={<Home size={18} />}
+                  className="min-h-(--size-button)"
                   onClick={() => {
                     onLeave();
                     navigate('/');
                   }}
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-night-600 px-4 py-3 font-semibold text-cream-300 hover:bg-night-700"
                 >
-                  <Home size={18} aria-hidden="true" />
                   Ana Sayfaya Dön
-                </button>
+                </Button>
               </div>
 
               <div className="mt-4">
@@ -733,34 +726,6 @@ export default function GameView({
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
-
-function PlayerScore({
-  name,
-  isConnected,
-  isTurn,
-  isMe = false,
-  isBot = false,
-  alignRight = false,
-}: {
-  name: string;
-  isConnected: boolean;
-  isTurn: boolean;
-  isMe?: boolean;
-  isBot?: boolean;
-  alignRight?: boolean;
-}) {
-  return (
-    <div className={`flex min-w-0 flex-col gap-0.5 ${alignRight ? 'items-end text-right' : 'items-start'}`}>
-      <span className={`flex items-center gap-1.5 text-sm font-semibold ${isTurn ? 'text-gold-400' : 'text-cream-100'}`}>
-        {isTurn && <span className="anim-turn-dot inline-block h-2 w-2 rounded-full bg-gold-400" aria-hidden="true" />}
-        {isBot && <Bot size={14} className="shrink-0 text-gold-400" aria-label="Yapay zekâ" />}
-        <span className="truncate">{name}</span>
-        {isMe && <span className="text-[10px] font-normal text-cream-400">(sen)</span>}
-      </span>
-      {!isConnected && <ConnectionDot isConnected={isConnected} />}
     </div>
   );
 }
@@ -799,21 +764,21 @@ function HistoryTicker({ history }: { history: string[] }) {
   if (history.length === 0) return null;
 
   return (
-    <section aria-label="Oyun geçmişi" className="px-1 text-xs text-cream-300">
+    <section aria-label="Oyun geçmişi" className="px-1 font-ui text-caption text-fg-secondary">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-cream-300/80 hover:bg-night-800/60"
+        className="flex min-h-(--size-touch-min) w-full cursor-pointer items-center gap-2 rounded-control-sm px-2 text-left text-fg-secondary transition-colors duration-(--duration-fast) hover:bg-surface-hover focus-visible:outline-3 focus-visible:outline-line-focus"
       >
-        <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold-400" />
+        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-gold-400" />
         <span className="min-w-0 flex-1 truncate">{history[0]}</span>
-        <span className="shrink-0 text-[10px] uppercase tracking-wider text-cream-400">
+        <span className="shrink-0 text-micro uppercase tracking-wider text-fg-muted">
           {open ? 'Gizle' : 'Geçmiş'}
         </span>
       </button>
       {open && (
-        <ul className="mt-1 space-y-1 rounded-xl border border-gold-500/15 bg-night-800/75 p-2.5">
+        <ul className="mt-1 space-y-1 rounded-control border border-line-subtle bg-surface-raised p-2.5">
           {history.slice(1, 6).map((entry, index) => (
             <li key={index} className="opacity-80">
               {entry}

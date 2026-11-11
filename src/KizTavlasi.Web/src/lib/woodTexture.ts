@@ -51,15 +51,15 @@ export function woodTexture(options: WoodOptions): string {
   );
 }
 
-/** Kahvehane çuhası: ince, kısa liflerden oluşan koyu yeşil keçe. */
+/** A3 masa çuhası: ince, kısa liflerden oluşan gece mavisi keçe (A3 zemini night-900/800 ailesi). */
 export function feltTexture(): string {
   return svgUrl(
     `<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'>` +
       `<filter id='f' x='0' y='0' width='100%' height='100%'>` +
       `<feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3' stitchTiles='stitch'/>` +
-      `<feColorMatrix type='matrix' values='0 0 0 0 0.03 0 0 0 0 0.09 0 0 0 0 0.06 0 0 0 0.95 -0.3'/>` +
+      `<feColorMatrix type='matrix' values='0 0 0 0 0.04 0 0 0 0 0.06 0 0 0 0 0.13 0 0 0 0.95 -0.3'/>` +
       `</filter>` +
-      `<rect width='160' height='160' fill='#183626'/>` +
+      `<rect width='160' height='160' fill='#151c30'/>` +
       `<rect width='160' height='160' filter='url(#f)' opacity='0.6'/>` +
       `</svg>`,
   );
