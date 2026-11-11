@@ -402,7 +402,7 @@ function ConnectedRoom({
           onLeave={handleLeave}
         />
       ) : (
-        <header className="mb-3 flex items-center justify-between gap-2 md:mb-4">
+        <header className="mb-3 flex flex-wrap items-center justify-between gap-2 md:mb-4">
           <div className="flex items-center gap-2.5">
             {/* Oyun sürerken oda kodu ve "Bağlı" rozeti gizlenir; bağlantı sorunu olursa rozet görünür. */}
             {(!matchActive || connectionStatus !== 'connected') && (
@@ -424,7 +424,7 @@ function ConnectedRoom({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="ml-auto flex items-center gap-1.5">
             <button
               type="button"
               onClick={toggleFastMode}
