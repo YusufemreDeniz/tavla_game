@@ -292,7 +292,8 @@ describe('RoomPage — oda giriş ekranı', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Odaya bağlanılıyor…');
   });
 
-  it('katılma hatası: ApiError mesajı toast olarak gösterilir ve ekran değişmez', async () => {
+  it('katılma hatası: kodsuz ApiError başlığı güvenilmez → bağlam mesajı toast olarak gösterilir ve ekran değişmez', async () => {
+    // 3.10B: kodsuz yanıtlardaki sunucu `title` metni artık gösterilmez (eski beklenti: 'Sunucu şu an yanıt vermiyor.').
     h.getPublicRoomInfo.mockResolvedValue(snapshot('ABC123', [player('p1', 'Ayşe')]));
     h.joinRoom.mockRejectedValue(new ApiError(500, 'Sunucu şu an yanıt vermiyor.', null));
     const user = userEvent.setup();
@@ -301,7 +302,7 @@ describe('RoomPage — oda giriş ekranı', () => {
     await user.type(await screen.findByLabelText('Oyuncu adın'), 'Fatma');
     await user.click(screen.getByRole('button', { name: 'Odaya Katıl' }));
 
-    await waitFor(() => expect(useUiStore.getState().toast).toEqual({ message: 'Sunucu şu an yanıt vermiyor.', kind: 'error' }));
+    await waitFor(() => expect(useUiStore.getState().toast).toEqual({ message: 'Odaya katılınamadı.', kind: 'error' }));
     expect(screen.getByLabelText('Oyuncu adın')).toBeInTheDocument();
     expect(sessionStorage.getItem(KEY('ABC123'))).toBeNull();
   });
@@ -339,10 +340,12 @@ describe('RoomPage — oda hata durumları', () => {
     expect(await screen.findByText('ANA SAYFA')).toBeInTheDocument();
   });
 
-  it('oda bilgisi hatası: kodsuz ApiError mesajı aynen, ApiError olmayan hata için genel mesaj gösterilir', async () => {
+  it('oda bilgisi hatası: kodsuz ApiError başlığı gösterilmez (3.10B), ApiError olmayan hata için de genel mesaj gösterilir', async () => {
+    // 3.10B: eski beklenti kodsuz 500 başlığını ('Sunucu hatası oluştu.') aynen gösteriyordu.
     h.getPublicRoomInfo.mockRejectedValueOnce(new ApiError(500, 'Sunucu hatası oluştu.', null));
     const first = renderRoom();
-    expect(await screen.findByText('Sunucu hatası oluştu.')).toBeInTheDocument();
+    expect(await screen.findByText('Oda bilgisi alınamadı.')).toBeInTheDocument();
+    expect(screen.queryByText('Sunucu hatası oluştu.')).not.toBeInTheDocument();
     first.unmount();
 
     h.getPublicRoomInfo.mockRejectedValueOnce(new Error('ağ'));
@@ -356,9 +359,11 @@ describe('RoomPage — oda hata durumları', () => {
     expect(await screen.findByText('Bu odanın süresi dolmuş. Yeni bir oda oluşturabilirsin.')).toBeInTheDocument();
     first.unmount();
 
+    // 3.10C: istemci eşlemesi olmayan tanınan kodda sunucu başlığı ('Geçersiz istek metni.') artık gösterilmez; bağlam fallback'i.
     h.getPublicRoomInfo.mockRejectedValueOnce(new ApiError(400, 'Geçersiz istek metni.', 'INVALID_COMMAND'));
     renderRoom();
-    expect(await screen.findByText('Geçersiz istek metni.')).toBeInTheDocument();
+    expect(await screen.findByText('Oda bilgisi alınamadı.')).toBeInTheDocument();
+    expect(screen.queryByText('Geçersiz istek metni.')).not.toBeInTheDocument();
   });
 
   it('iki oyuncu varsa "Masa dolu": adlar, izleme ve ana sayfa seçenekleri gösterilir; ad formu gösterilmez', async () => {
@@ -423,7 +428,7 @@ describe('RoomPage — oda hata durumları', () => {
     expect(screen.getByRole('button', { name: 'İzlemeyi bırak' })).toBeInTheDocument();
   });
 
-  it('izleme hatası: ApiError mesajı, ApiError olmayan hatada "Maç izlenemedi." toast olarak gösterilir', async () => {
+  it('izleme hatası: kodsuz ApiError başlığı güvenilmez (3.10B), ApiError olmayan hatada da "Maç izlenemedi." toast olarak gösterilir', async () => {
     h.getPublicRoomInfo.mockResolvedValue(snapshot('ABC123', [player('p1', 'Ayşe'), player('p2', 'Fatma')]));
     const user = userEvent.setup();
     renderRoom();
@@ -431,7 +436,8 @@ describe('RoomPage — oda hata durumları', () => {
 
     h.watchRoom.mockRejectedValueOnce(new ApiError(503, 'İzleme şu an kapalı.', null));
     await user.click(watch);
-    await waitFor(() => expect(useUiStore.getState().toast).toEqual({ message: 'İzleme şu an kapalı.', kind: 'error' }));
+    // 3.10B: eski beklenti kodsuz 503 başlığını ('İzleme şu an kapalı.') aynen gösteriyordu.
+    await waitFor(() => expect(useUiStore.getState().toast).toEqual({ message: 'Maç izlenemedi.', kind: 'error' }));
 
     h.watchRoom.mockRejectedValueOnce(new Error('ağ'));
     await user.click(screen.getByRole('button', { name: 'Maçı İzle' }));
@@ -565,9 +571,13 @@ describe('RoomPage — oturum', () => {
     );
     expect(lastHub().refreshState).toHaveBeenCalledTimes(1);
 
+    // 3.10B: HubException gövdesindeki serbest sunucu metni artık gösterilmez (eski beklenti: 'Bu işlem şu an yapılamaz.');
+    // yalnızca tanımlı domain kodu + istemci metni gösterilir (karşılık testler: RoomPage.errors.test.tsx).
     h.startMatchImpl = () => Promise.reject(new Error('An unexpected error occurred: HubException: Bu işlem şu an yapılamaz.'));
     await user.click(start);
-    await waitFor(() => expect(useUiStore.getState().toast).toEqual({ message: 'Bu işlem şu an yapılamaz.', kind: 'error' }));
+    await waitFor(() =>
+      expect(useUiStore.getState().toast).toEqual({ message: 'İşlem gerçekleştirilemedi. Lütfen tekrar deneyin.', kind: 'error' }),
+    );
   });
 });
 
@@ -878,7 +888,10 @@ describe('RoomPage — bağlı oda', () => {
 
     h.createBotRoom.mockRejectedValueOnce(new ApiError(429, 'Çok fazla istek.', null));
     await user.click(kolay);
-    await waitFor(() => expect(useUiStore.getState().toast).toEqual({ message: 'Çok fazla istek.', kind: 'error' }));
+    // 3.10B: kodsuz 429 için sunucu başlığı ('Çok fazla istek.') yerine sabit, güvenli istemci mesajı gösterilir.
+    await waitFor(() =>
+      expect(useUiStore.getState().toast).toEqual({ message: 'Çok fazla istek gönderildi. Lütfen biraz bekleyin.', kind: 'error' }),
+    );
 
     h.createBotRoom.mockRejectedValueOnce(new Error('ağ'));
     await user.click(kolay);

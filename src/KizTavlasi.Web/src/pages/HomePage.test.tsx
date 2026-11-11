@@ -254,7 +254,7 @@ describe('HomePage — A3 geçişi: davranış korumaları', () => {
     expect(create).not.toHaveAttribute('aria-busy');
   });
 
-  it('API hatası kullanıcıya gösterilir (ApiError mesajı) ve yönlendirme yapılmaz', async () => {
+  it('API hatası kullanıcıya güvenli mesajla gösterilir (kodsuz ApiError başlığı güvenilmez, 3.10B) ve yönlendirme yapılmaz', async () => {
     createRoomMock.mockRejectedValue(new ApiError(500, 'Sunucu şu an yanıt vermiyor.', null));
     const user = userEvent.setup();
     renderHomePage();
@@ -263,7 +263,8 @@ describe('HomePage — A3 geçişi: davranış korumaları', () => {
     await user.click(screen.getByRole('button', { name: 'Oda Oluştur' }));
 
     await vi.waitFor(() =>
-      expect(useUiStore.getState().toast).toEqual({ message: 'Sunucu şu an yanıt vermiyor.', kind: 'error' }),
+      // 3.10B: eski beklenti kodsuz 500 başlığını ('Sunucu şu an yanıt vermiyor.') aynen gösteriyordu.
+      expect(useUiStore.getState().toast).toEqual({ message: 'Oda oluşturulamadı.', kind: 'error' }),
     );
     expect(navigateMock).not.toHaveBeenCalled();
     // Hata sonrası düğme tekrar kullanılabilir.

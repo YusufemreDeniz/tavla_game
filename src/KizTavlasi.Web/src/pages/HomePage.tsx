@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Bot, BookOpen, Volume2, VolumeX } from 'lucide-react';
 import { z } from 'zod';
 import { createBotRoom, createRoom } from '../api/rooms';
-import { ApiError } from '../api/client';
+import { toUserMessage } from '../lib/userError';
 import { savePlayerToken } from '../lib/session';
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from '../config/branding';
 import { useUiStore } from '../store/uiStore';
@@ -76,7 +76,7 @@ export default function HomePage() {
       navigate(`/oda/${result.roomCode}`);
     },
     onError: (error) => {
-      showToast(error instanceof ApiError ? error.message : 'Oda oluşturulamadı.', 'error');
+      showToast(toUserMessage(error, { fallback: 'Oda oluşturulamadı.' }), 'error');
     },
   });
 

@@ -25,6 +25,7 @@ import type { BotDifficulty } from '../types/game';
 import { GameHubClient } from '../realtime/gameHubClient';
 import { useGameStore } from '../store/gameStore';
 import { useUiStore } from '../store/uiStore';
+import { toUserMessage } from '../lib/userError';
 import ConnectionBadge from '../components/ConnectionBadge';
 import RulesModal from '../components/RulesModal';
 import ShareLinkCard from '../components/ShareLinkCard';
@@ -131,11 +132,7 @@ function JoinRoomView({
         setRoomFull(true);
         return;
       }
-      const message =
-        error instanceof ApiError
-          ? (error.errorCode && ERROR_MESSAGES[error.errorCode]) || error.message
-          : 'Odaya katılınamadı.';
-      showToast(message, 'error');
+      showToast(toUserMessage(error, { known: ERROR_MESSAGES, fallback: 'Odaya katılınamadı.' }), 'error');
     },
   });
 
@@ -146,7 +143,7 @@ function JoinRoomView({
       onWatch(result.spectatorToken);
     },
     onError: (error) => {
-      showToast(error instanceof ApiError ? error.message : 'Maç izlenemedi.', 'error');
+      showToast(toUserMessage(error, { known: ERROR_MESSAGES, fallback: 'Maç izlenemedi.' }), 'error');
     },
   });
 
@@ -167,10 +164,7 @@ function JoinRoomView({
 
   if (roomInfo.isError) {
     const error = roomInfo.error;
-    const message =
-      error instanceof ApiError
-        ? (error.errorCode && ERROR_MESSAGES[error.errorCode]) || error.message
-        : 'Oda bilgisi alınamadı.';
+    const message = toUserMessage(error, { known: ERROR_MESSAGES, fallback: 'Oda bilgisi alınamadı.' });
     return <StateScreen title={message} actions={<Button onClick={() => navigate('/')}>Ana Sayfaya Dön</Button>} />;
   }
 
@@ -321,9 +315,12 @@ function ConnectedRoom({
         } else if (message.includes('güncel değil') || message.includes('STALE_STATE')) {
           void hub.refreshState();
           showToast('Oyun durumu senkronize edildi, hamleni tekrar yapabilirsin.', 'info');
-        } else if (message.length > 0) {
-          const cleaned = message.replace(/^.*HubException: /, '');
-          showToast(cleaned, 'error');
+        } else {
+          // Bilinmeyen teknik metin gösterilmez; yalnızca güvenilir bağlantı DURUMU veya kasıtlı HubException metni kullanılır.
+          showToast(
+            toUserMessage(error, { known: ERROR_MESSAGES, connectionStatus: useGameStore.getState().connectionStatus }),
+            'error',
+          );
         }
       }
     },
@@ -366,7 +363,7 @@ function ConnectedRoom({
         savePlayerToken(result.roomCode, result.playerToken);
         navigate(`/oda/${result.roomCode}`);
       } catch (error) {
-        showToast(error instanceof ApiError ? error.message : 'Bot masası açılamadı.', 'error');
+        showToast(toUserMessage(error, { fallback: 'Bot masası açılamadı.' }), 'error');
       }
     },
     [snapshot, myPlayerId, roomCode, token, navigate, showToast],
