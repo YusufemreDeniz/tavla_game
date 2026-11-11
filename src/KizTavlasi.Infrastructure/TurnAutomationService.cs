@@ -25,6 +25,7 @@ public sealed class TurnAutomationService : BackgroundService, ITurnAutomationSc
     private readonly ILogger<TurnAutomationService> _logger;
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _timers = new();
     private readonly CancellationTokenSource _shutdown = new();
+    private int _disposed;
 
     public TurnAutomationService(
         IServiceScopeFactory scopeFactory,
@@ -143,6 +144,12 @@ public sealed class TurnAutomationService : BackgroundService, ITurnAutomationSc
 
     public override void Dispose()
     {
+        // IDisposable sözleşmesi: tekrar çağrılabilir olmalı (DI bu tek örneği 3 kayıtla birden fazla kez dispose eder).
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
         _shutdown.Cancel();
         _timers.Clear();
         _shutdown.Dispose();
