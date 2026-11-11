@@ -30,7 +30,7 @@ import ConnectionBadge from '../components/ConnectionBadge';
 import RulesModal from '../components/RulesModal';
 import ShareLinkCard from '../components/ShareLinkCard';
 import { FloatingReactions } from '../components/ReactionsBar';
-import { Button, LoadingScreen, Notice, StateScreen, TextField } from '../components/ui';
+import { Button, IconButton, LoadingScreen, Notice, StateScreen, TextField } from '../components/ui';
 import { RoomHeader } from '../components/room/RoomHeader';
 import LobbyView from './LobbyView';
 import GameView from './GameView';
@@ -399,20 +399,20 @@ function ConnectedRoom({
           onLeave={handleLeave}
         />
       ) : (
-        <header className="mb-3 flex flex-wrap items-center justify-between gap-2 md:mb-4">
+        <header className="mb-3 flex flex-wrap items-center justify-between gap-2 font-ui md:mb-4">
           <div className="flex items-center gap-2.5">
             {/* Oyun sürerken oda kodu ve "Bağlı" rozeti gizlenir; bağlantı sorunu olursa rozet görünür. */}
             {(!matchActive || connectionStatus !== 'connected') && (
               <>
-                <span className="rounded-lg border border-gold-500/30 bg-night-800 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-gold-400">
+                <span className="rounded-control-sm border border-line-accent bg-surface-raised px-3 py-1.5 font-code text-ui font-medium tracking-widest text-gold-400">
                   {roomCode}
                 </span>
-                <ConnectionBadge status={connectionStatus} />
+                <ConnectionBadge status={connectionStatus} variant="a3" />
               </>
             )}
             {spectatorCount > 0 && (
               <span
-                className="inline-flex items-center gap-1 rounded-full border border-night-600 px-2 py-0.5 text-[11px] text-cream-300"
+                className="inline-flex items-center gap-1 rounded-pill border border-line-control px-2.5 py-0.5 text-caption text-fg-secondary"
                 aria-label={`${spectatorCount} izleyici`}
                 title="Maçı izleyenler"
               >
@@ -422,44 +422,26 @@ function ConnectedRoom({
             )}
           </div>
           <div className="ml-auto flex items-center gap-1.5">
-            <button
-              type="button"
+            <IconButton
               onClick={toggleFastMode}
-              aria-label={fastMode ? 'Normal animasyon hızına geç' : 'Hızlı animasyon modunu aç'}
+              label={fastMode ? 'Normal animasyon hızına geç' : 'Hızlı animasyon modunu aç'}
               aria-pressed={fastMode}
               title={fastMode ? 'Hızlı animasyon açık' : 'Normal animasyon hızı'}
-              className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border p-2.5 transition-colors ${
-                fastMode
-                  ? 'border-gold-500/60 bg-gold-500/15 text-gold-400'
-                  : 'border-night-600 text-cream-300 hover:bg-night-800'
-              }`}
-            >
-              <Zap size={16} />
-            </button>
-            <button
-              type="button"
+              icon={<Zap size={16} />}
+              className="aria-pressed:text-fg-accent"
+            />
+            <IconButton
               onClick={toggleSound}
-              aria-label={soundEnabled ? 'Sesi kapat' : 'Sesi aç'}
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-night-600 p-2.5 text-cream-300 hover:bg-night-800"
-            >
-              {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-            </button>
-            <button
-              type="button"
-              onClick={() => setRulesOpen(true)}
-              aria-label="Kuralları göster"
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-night-600 p-2.5 text-cream-300 hover:bg-night-800"
-            >
-              <BookOpen size={16} />
-            </button>
-            <button
-              type="button"
+              label={soundEnabled ? 'Sesi kapat' : 'Sesi aç'}
+              icon={soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            />
+            <IconButton onClick={() => setRulesOpen(true)} label="Kuralları göster" icon={<BookOpen size={16} />} />
+            <IconButton
               onClick={handleLeave}
-              aria-label={spectator ? 'İzlemeyi bırak' : 'Odadan çık'}
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-bordo-600/50 p-2.5 text-rose-400 hover:bg-bordo-700/30"
-            >
-              <DoorOpen size={16} />
-            </button>
+              label={spectator ? 'İzlemeyi bırak' : 'Odadan çık'}
+              icon={<DoorOpen size={16} />}
+              className="border-status-error-border/60 text-status-error-fg"
+            />
           </div>
         </header>
       ),

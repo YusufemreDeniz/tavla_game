@@ -433,7 +433,8 @@ const Point = memo(function Point({
         onFocus={() => onPreview?.(pointNumber)}
         onBlur={() => onPreview?.(null)}
         aria-label={`${pointNumber}. haneyi oyna`}
-        className="relative block h-full min-h-9 w-full min-w-0 cursor-pointer touch-manipulation select-none rounded-md [-webkit-touch-callout:none]"
+        data-clickable="true"
+        className="relative block h-full min-h-9 w-full min-w-0 cursor-pointer touch-manipulation select-none rounded-md ring-1 ring-inset ring-gold-400/55 [-webkit-touch-callout:none]"
       >
         {content}
       </button>
@@ -656,21 +657,23 @@ function PlayerChip({
 }) {
   const remaining = board.points.reduce((sum, p) => sum + Math.max(0, p.backCount - 1), 0);
   return (
-    <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-cream-200 md:text-xs">
+    <div
+      data-active={isTurn ? 'true' : 'false'}
+      className={`flex min-w-0 items-center gap-1.5 rounded-pill border px-2 py-0.5 font-ui text-micro text-fg-secondary transition-colors duration-(--duration-fast) ${
+        isTurn ? 'border-line-selected bg-surface-raised' : 'border-transparent'
+      }`}
+    >
       <span
         aria-hidden="true"
         className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-white/25"
         style={{ backgroundColor: isMine ? '#8e2f3c' : '#f2e8d2' }}
       />
-      <span className="truncate font-semibold">{name}</span>
-      {isTurn && (
-        <span className="rounded-full bg-gold-500/20 px-1.5 py-0.5 text-[10px] font-bold text-gold-400">Sırada</span>
-      )}
+      <span className="truncate font-semibold text-fg-primary">{name}</span>
       <span
-        className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+        className={`shrink-0 rounded-pill border px-2 py-0.5 text-micro font-medium ${
           board.isCollecting
-            ? 'border-emerald-500/30 bg-emerald-950/80 text-emerald-300'
-            : 'border-gold-500/20 bg-walnut-800/90 text-cream-200'
+            ? 'border-line-accent bg-surface-input text-fg-accent'
+            : 'border-line-subtle bg-surface-input text-fg-secondary'
         }`}
       >
         {board.isCollecting ? `Toplama · ${board.collectedCount}/15` : `İndirme · ${9 - remaining}/9`}
@@ -823,7 +826,8 @@ const GRID: Record<BoardOrientation, React.CSSProperties> = {
   portrait: {
     gridTemplateColumns: 'minmax(0, 1fr) 1.4rem minmax(0, 1fr)',
     gridTemplateRows: 'repeat(6, minmax(0, 1fr)) 0.9rem repeat(6, minmax(0, 1fr)) 2rem',
-    height: 'clamp(32rem, 160vw, 44rem)',
+    // 12 hane satırı ≥44 px (dokunma hedefi): (36rem − 0.9rem − 2rem) / 12 ≈ 44 px.
+    height: 'clamp(36rem, 160vw, 46rem)',
   },
 };
 
@@ -999,14 +1003,14 @@ export default function BackgammonBoard({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3 px-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1">
         <PlayerChip name={opponentName} isMine={false} isTurn={!isMyTurn} board={opponentBoard} />
         <PlayerChip name={myName} isMine isTurn={isMyTurn} board={myBoard} />
       </div>
 
-      {/* Masa: kahvehane çuhası; tahta onun üstünde, altına yumuşak gölge düşer. */}
+      {/* Masa: A3 gece mavisi çuha; altın ince çizgiyle çerçevelenir, tahta onun üstünde durur. */}
       <div
-        className="rounded-3xl p-2.5 md:p-6"
+        className="rounded-dialog border border-line-accent/50 p-2.5 md:p-6"
         style={{
           background: `radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.05), transparent 60%), ${FELT_TEXTURE}`,
           backgroundSize: 'auto, 160px',

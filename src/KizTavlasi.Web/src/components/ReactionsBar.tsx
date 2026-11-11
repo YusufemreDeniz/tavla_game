@@ -41,7 +41,7 @@ export function ReactionsBar({ onSend }: ReactionsBarProps) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-label={open ? 'Emoji kutusunu kapat' : 'Emoji kutusunu aç'}
-        className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-gold-500/30 bg-night-800 px-4 py-2 text-sm font-medium text-cream-200 shadow-lg transition-colors hover:bg-night-700"
+        className="inline-flex min-h-(--size-touch-min) cursor-pointer items-center gap-2 rounded-control border border-line-control bg-transparent px-4 py-2 font-ui text-ui-sm font-medium text-fg-primary transition-colors duration-(--duration-fast) hover:border-line-control-hover hover:bg-surface-hover focus-visible:outline-3 focus-visible:outline-line-focus"
       >
         {open ? <X size={18} aria-hidden="true" /> : <SmilePlus size={18} aria-hidden="true" />}
         Tepki Gönder
@@ -56,7 +56,7 @@ export function ReactionsBar({ onSend }: ReactionsBarProps) {
             transition={{ duration: 0.16 }}
             role="menu"
             aria-label="Emoji tepkileri"
-            className="absolute bottom-full z-30 mb-2 grid w-72 grid-cols-6 gap-1 rounded-2xl border border-gold-500/25 bg-night-800 p-2 shadow-2xl"
+            className="absolute bottom-full z-30 mb-2 grid w-72 max-w-[calc(100vw-2.5rem)] grid-cols-6 gap-1 rounded-panel border border-line-accent bg-surface-raised p-2 shadow-dialog"
           >
             {REACTIONS.map((emoji) => (
               <button
